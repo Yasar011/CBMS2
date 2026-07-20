@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ref, onValue } from "firebase/database";
+import { ref, onValue, push, set } from "firebase/database";
 import { db } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { tokens } from "../tokens";
@@ -44,6 +44,10 @@ export default function Dashboard() {
   const visibleNav = isAdmin ? ALL_NAV : ALL_NAV.filter((n) => n.dept === dept);
   const [activeKey, setActiveKey] = useState(visibleNav[0]?.key || "rmwh");
   const [showUsers, setShowUsers] = useState(false);
+
+  async function addRecord(path, data) {
+    await set(push(ref(db, path)), data);
+  }
 
   const titles = {
     executive: "Executive Dashboard",
@@ -114,10 +118,10 @@ export default function Dashboard() {
         <div className="px-8 py-6 flex flex-col gap-6 overflow-auto">
           {showUsers && <UserManagement />}
           {!showUsers && activeKey === "executive" && <ExecutiveView grnRecords={grnRecords} dockets={dockets} results={mqaResults} />}
-          {!showUsers && activeKey === "rmwh" && <RMWHView grnRecords={grnRecords} />}
-          {!showUsers && activeKey === "cutting" && <CuttingView dockets={dockets} />}
-          {!showUsers && activeKey === "mqa" && <MQAView results={mqaResults} />}
-          {!showUsers && activeKey === "planning" && <PlanningView rows={planningRows} />}
+          {!showUsers && activeKey === "rmwh" && <RMWHView grnRecords={grnRecords} canWrite={isAdmin || dept === "RMWH"} onAdd={(data) => addRecord("depts/RMWH/grn", data)} />}
+          {!showUsers && activeKey === "cutting" && <CuttingView dockets={dockets} canWrite={isAdmin || dept === "CUTTING"} onAdd={(data) => addRecord("depts/CUTTING/dockets", data)} />}
+          {!showUsers && activeKey === "mqa" && <MQAView results={mqaResults} canWrite={isAdmin || dept === "MQA"} onAdd={(data) => addRecord("depts/MQA/results", data)} />}
+          {!showUsers && activeKey === "planning" && <PlanningView rows={planningRows} canWrite={isAdmin || dept === "PLANNING"} onAdd={(data) => addRecord("depts/PLANNING/rows", data)} />}
           {!showUsers && activeKey === "reports" && <ReportsView grnRecords={grnRecords} dockets={dockets} />}
         </div>
       </div>

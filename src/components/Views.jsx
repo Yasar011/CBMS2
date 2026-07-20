@@ -6,15 +6,16 @@ import {
   Layers, Hash, Calendar, Building2, Filter, Palette, AlertTriangle,
   PackageCheck, FlaskConical, TrendingUp, CheckCircle2, XCircle,
   RotateCcw, ClipboardList, CalendarClock, FileText, Target, Scissors,
-  FileBarChart
+  FileBarChart, Plus, X
 } from "lucide-react";
 import { tokens, gradeColor } from "../tokens";
 import { KpiCard, shadeHex } from "../lib";
 
 // ---------------- RMWH ----------------
-export function RMWHView({ grnRecords }) {
+export function RMWHView({ grnRecords, onAdd, canWrite }) {
   const [styleFilter, setStyleFilter] = useState("All");
   const [gradeFilter, setGradeFilter] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   const styles = useMemo(() => Array.from(new Set(grnRecords.map((r) => r.style))), [grnRecords]);
   const totalQty = grnRecords.reduce((a, r) => a + r.qty, 0);
@@ -33,7 +34,7 @@ export function RMWHView({ grnRecords }) {
     return styleOk && gradeOk;
   }), [grnRecords, styleFilter, gradeFilter]);
 
-  if (grnRecords.length === 0) return <EmptyState label="RMWH" path="depts/RMWH/grn" />;
+  if (grnRecords.length === 0 && !canWrite) return <EmptyState label="RMWH" path="depts/RMWH/grn" />;
 
   return (
     <>
@@ -104,8 +105,24 @@ export function RMWHView({ grnRecords }) {
                 {s}
               </button>
             ))}
+            {canWrite && !showAdd && <AddButton label="Add GRN Record" onClick={() => setShowAdd(true)} />}
           </div>
         </div>
+        {showAdd && (
+          <AddRecordForm
+            onCancel={() => setShowAdd(false)}
+            onSubmit={(data) => onAdd(data)}
+            fields={[
+              { key: "po", label: "PO Number" },
+              { key: "style", label: "Style" },
+              { key: "batch", label: "Batch Number" },
+              { key: "invoice", label: "Invoice Number" },
+              { key: "qty", label: "GRN Qty", type: "number" },
+              { key: "date", label: "GRN Date", type: "date" },
+              { key: "shades", label: "Shades (comma-separated)", type: "list", placeholder: "A7, B7", wide: true },
+            ]}
+          />
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["PO Number", "Style", "Batch", "Invoice", "GRN Qty", "GRN Date", "Shades"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
@@ -139,9 +156,10 @@ export function RMWHView({ grnRecords }) {
 }
 
 // ---------------- Cutting ----------------
-export function CuttingView({ dockets }) {
+export function CuttingView({ dockets, onAdd, canWrite }) {
   const [activeShade, setActiveShade] = useState(null);
   const [componentFilter, setComponentFilter] = useState("All");
+  const [showAdd, setShowAdd] = useState(false);
 
   const shadeOccurrence = {};
   dockets.forEach((d) => (d.shades || []).forEach((s) => {
@@ -164,7 +182,7 @@ export function CuttingView({ dockets }) {
   const topShades = shadeList.slice(0, 12);
   const components = Array.from(new Set(dockets.map((d) => d.component)));
 
-  if (dockets.length === 0) return <EmptyState label="Cutting" path="depts/CUTTING/dockets" />;
+  if (dockets.length === 0 && !canWrite) return <EmptyState label="Cutting" path="depts/CUTTING/dockets" />;
 
   return (
     <>
@@ -231,8 +249,25 @@ export function CuttingView({ dockets }) {
                 {c}
               </button>
             ))}
+            {canWrite && !showAdd && <AddButton label="Add Docket" onClick={() => setShowAdd(true)} />}
           </div>
         </div>
+        {showAdd && (
+          <AddRecordForm
+            onCancel={() => setShowAdd(false)}
+            onSubmit={(data) => onAdd(data)}
+            fields={[
+              { key: "docketId", label: "Docket ID" },
+              { key: "layJob", label: "Lay Job No" },
+              { key: "component", label: "Component", placeholder: "Body / CFL+Binding" },
+              { key: "schedule", label: "Schedule" },
+              { key: "shades", label: "Shade Codes (comma-separated)", type: "list", placeholder: "A17, B5" },
+              { key: "fabCode", label: "Fab Code" },
+              { key: "created", label: "Created", type: "date" },
+              { key: "consumption", label: "Consumption", type: "number" },
+            ]}
+          />
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["Docket ID", "Lay Job No", "Component", "Schedule", "Shade Codes", "Fab Code", "Created", "Consumption"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
@@ -267,8 +302,9 @@ export function CuttingView({ dockets }) {
 }
 
 // ---------------- MQA ----------------
-export function MQAView({ results }) {
+export function MQAView({ results, onAdd, canWrite }) {
   const [resultFilter, setResultFilter] = useState("All");
+  const [showAdd, setShowAdd] = useState(false);
   const filtered = useMemo(() => results.filter((r) => resultFilter === "All" || r.result === resultFilter), [results, resultFilter]);
   const mqaResultColor = { Pass: tokens.teal, Retest: tokens.amber, Fail: tokens.crimson };
   const passCount = results.filter((r) => r.result === "Pass").length;
@@ -276,13 +312,13 @@ export function MQAView({ results }) {
   const failCount = results.filter((r) => r.result === "Fail").length;
   const avgDeltaE = results.length ? (results.reduce((a, r) => a + Number(r.deltaE || 0), 0) / results.length).toFixed(2) : "—";
 
-  if (results.length === 0) return <EmptyState label="MQA" path="depts/MQA/results" />;
+  if (results.length === 0 && !canWrite) return <EmptyState label="MQA" path="depts/MQA/results" />;
 
   return (
     <>
       <div className="flex gap-4 flex-wrap">
         <KpiCard icon={FlaskConical} label="Samples Tested" value={results.length} sub="Live from Firebase" accent={tokens.indigo} />
-        <KpiCard icon={CheckCircle2} label="Pass" value={passCount} sub={`${((passCount / results.length) * 100).toFixed(0)}%`} accent={tokens.teal} />
+        <KpiCard icon={CheckCircle2} label="Pass" value={passCount} sub={results.length ? `${((passCount / results.length) * 100).toFixed(0)}%` : ""} accent={tokens.teal} />
         <KpiCard icon={RotateCcw} label="Retest" value={retestCount} sub="Delta E 0.8 – 1.2" accent={tokens.amber} />
         <KpiCard icon={XCircle} label="Fail" value={failCount} sub="Delta E > 1.2" accent={tokens.crimson} />
         <KpiCard icon={TrendingUp} label="Avg Delta E" value={avgDeltaE} sub="Across all samples" accent={tokens.indigo} />
@@ -313,8 +349,22 @@ export function MQAView({ results }) {
                 {s}
               </button>
             ))}
+            {canWrite && !showAdd && <AddButton label="Add Result" onClick={() => setShowAdd(true)} />}
           </div>
         </div>
+        {showAdd && (
+          <AddRecordForm
+            onCancel={() => setShowAdd(false)}
+            onSubmit={(data) => onAdd(data)}
+            fields={[
+              { key: "shade", label: "Shade Code" },
+              { key: "deltaE", label: "Delta E", type: "number" },
+              { key: "result", label: "Result", type: "select", options: ["Pass", "Retest", "Fail"], default: "Pass" },
+              { key: "tester", label: "Tested By" },
+              { key: "date", label: "Date", type: "date" },
+            ]}
+          />
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["Shade Code", "Delta E", "Result", "Tested By", "Date"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
@@ -337,13 +387,14 @@ export function MQAView({ results }) {
 }
 
 // ---------------- Planning ----------------
-export function PlanningView({ rows }) {
+export function PlanningView({ rows, onAdd, canWrite }) {
+  const [showAdd, setShowAdd] = useState(false);
   const totalRequired = rows.reduce((a, r) => a + Number(r.required || 0), 0);
   const totalAllocated = rows.reduce((a, r) => a + Number(r.allocated || 0), 0);
   const fullyAllocated = rows.filter((r) => r.status === "Fully Allocated").length;
   const planningStatusColor = { "Fully Allocated": tokens.teal, "Partial": tokens.amber, "Pending": tokens.crimson };
 
-  if (rows.length === 0) return <EmptyState label="Planning" path="depts/PLANNING/rows" />;
+  if (rows.length === 0 && !canWrite) return <EmptyState label="Planning" path="depts/PLANNING/rows" />;
 
   return (
     <>
@@ -369,7 +420,24 @@ export function PlanningView({ rows }) {
       </div>
 
       <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
-        <h2 className="text-sm font-semibold mb-4">Schedule Allocation</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold">Schedule Allocation</h2>
+          {canWrite && !showAdd && <AddButton label="Add Schedule" onClick={() => setShowAdd(true)} />}
+        </div>
+        {showAdd && (
+          <AddRecordForm
+            onCancel={() => setShowAdd(false)}
+            onSubmit={(data) => onAdd(data)}
+            fields={[
+              { key: "schedule", label: "Schedule" },
+              { key: "style", label: "Style" },
+              { key: "components", label: "Components" },
+              { key: "required", label: "Required", type: "number" },
+              { key: "allocated", label: "Allocated", type: "number" },
+              { key: "status", label: "Status", type: "select", options: ["Fully Allocated", "Partial", "Pending"], default: "Pending" },
+            ]}
+          />
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["Schedule", "Style", "Components", "Required", "Allocated", "Status"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
@@ -572,5 +640,81 @@ function EmptyState({ label, path }) {
         Nothing found at <span className="font-mono">{path}</span> in Firebase. Run <span className="font-mono">npm run seed</span> once to load the starting dataset.
       </p>
     </div>
+  );
+}
+
+function AddButton({ label, onClick }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md font-medium"
+      style={{ backgroundColor: tokens.indigo, color: tokens.text }}>
+      <Plus size={13} /> {label}
+    </button>
+  );
+}
+
+// Generic add-record form. `fields` describes each input; onSubmit receives
+// the built record object (numbers/lists coerced) and should write it to Firebase.
+function AddRecordForm({ fields, onSubmit, onCancel }) {
+  const [values, setValues] = useState(() => Object.fromEntries(fields.map((f) => [f.key, f.default ?? ""])));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const data = {};
+      for (const f of fields) {
+        let v = values[f.key];
+        if (f.type === "number") v = Number(v);
+        else if (f.type === "list") v = v.split(",").map((s) => s.trim()).filter(Boolean);
+        data[f.key] = v;
+      }
+      await onSubmit(data);
+      onCancel();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 mb-5 p-4 rounded-lg" style={{ backgroundColor: tokens.panelAlt, border: `1px solid ${tokens.line}` }}>
+      <div className="col-span-2 flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: tokens.textMuted }}>New record</h3>
+        <button type="button" onClick={onCancel} aria-label="Cancel"><X size={14} color={tokens.textMuted} /></button>
+      </div>
+      {fields.map((f) => (
+        <div key={f.key} className={f.wide ? "col-span-2" : ""}>
+          <label className="text-[11px]" style={{ color: tokens.textMuted }}>{f.label}</label>
+          {f.type === "select" ? (
+            <select value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+              className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.text }}>
+              {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (
+            <input
+              required={f.required !== false}
+              type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+              step={f.type === "number" ? "any" : undefined}
+              value={values[f.key]}
+              onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+              placeholder={f.placeholder}
+              className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
+              style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.text }}
+            />
+          )}
+        </div>
+      ))}
+      {error && <div className="col-span-2 text-xs" style={{ color: tokens.crimson }}>{error}</div>}
+      <div className="col-span-2 flex gap-2">
+        <button type="submit" disabled={busy} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: tokens.indigo, color: tokens.text, opacity: busy ? 0.6 : 1 }}>
+          {busy ? "Saving..." : "Save record"}
+        </button>
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg text-sm" style={{ color: tokens.textMuted, border: `1px solid ${tokens.line}` }}>Cancel</button>
+      </div>
+    </form>
   );
 }
