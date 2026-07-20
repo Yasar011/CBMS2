@@ -491,12 +491,12 @@ export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
         <h2 className="text-sm font-semibold mb-1">Delta E by Shade Code</h2>
         <p className="text-[11px] mb-4" style={{ color: tokens.textMuted }}>Lower is a closer match · green = Pass, red = Fail</p>
         <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={results} margin={{ left: -20 }}>
+          <BarChart data={filtered} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="shade" tick={{ fill: tokens.textMuted, fontSize: 9 }} axisLine={{ stroke: tokens.line }} tickLine={false} interval={0} angle={-45} textAnchor="end" height={60} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
-            <Bar dataKey="deltaE" radius={[3, 3, 0, 0]}>{results.map((r, i) => <Cell key={i} fill={mqaResultColor[r.result] || tokens.indigo} />)}</Bar>
+            <Bar dataKey="deltaE" radius={[3, 3, 0, 0]}>{filtered.map((r, i) => <Cell key={i} fill={mqaResultColor[r.result] || tokens.indigo} />)}</Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -544,8 +544,8 @@ export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
           <table className="w-full text-left border-collapse">
             <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{cols.map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
             <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id || r.shade} style={{ borderBottom: `1px solid ${tokens.line}` }}>
+              {filtered.map((r, i) => (
+                <tr key={r.id || r.shade || i} style={{ borderBottom: `1px solid ${tokens.line}` }}>
                   <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap"><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: shadeHex(r.shade) }} />{dash(r.shade)}</div></td>
                   <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.batch)}</td>
                   <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.style)}</td>
@@ -558,7 +558,7 @@ export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
                   <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{r.matchPct !== undefined && r.matchPct !== "" ? `${r.matchPct}%` : "—"}</td>
                   <td className="py-2.5 pr-4 text-xs whitespace-nowrap"><span className="font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: `${tokens.indigo}22`, color: tokens.indigo }}>{dash(r.shadeGroup)}</span></td>
                   <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.mappedStandard)}</td>
-                  <td className="py-2.5 pr-4"><span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ color: mqaResultColor[r.result], backgroundColor: `${mqaResultColor[r.result] || tokens.line}22` }}>{dash(r.result)}</span></td>
+                  <td className="py-2.5 pr-4"><span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ color: mqaResultColor[r.result] || tokens.textMuted, backgroundColor: `${mqaResultColor[r.result] || tokens.panelAlt}` }}>{dash(r.result)}</span></td>
                   <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.recommendation)}</td>
                   <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.tester)}</td>
                   <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.date)}</td>
