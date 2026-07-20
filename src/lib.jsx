@@ -12,6 +12,9 @@ export function hashCode(str) {
 // Uses medium lightness (45–65 %) so the swatch is never invisible against a
 // dark panel (#1B2027) or a light panel (#FFFFFF).
 export function shadeHex(code) {
+  // Guard: Firebase records can arrive with undefined/null shade fields;
+  // returning a neutral mid-grey prevents hashCode(undefined) from crashing.
+  if (!code) return "#6B7280";
   const h = hashCode(code);
   const warm = h % 2 === 0;
   // Spread hues across warm (orange/red) and cool (blue/purple) spectrums
