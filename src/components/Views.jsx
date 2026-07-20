@@ -390,6 +390,15 @@ export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
   const avgDeltaE = results.length ? (results.reduce((a, r) => a + Number(r.deltaE || 0), 0) / results.length).toFixed(2) : "—";
   const library = useMemo(() => deriveMasterLibrary(results), [results]);
 
+  // Chart data must contain ONLY the fields the chart reads. Passing raw MQA
+  // records straight to Recharts leaks extra data fields (notably `style`, a
+  // fabric-style string) onto the rendered SVG element, which React rejects
+  // with error #62 ("style prop expects a mapping ... not a string").
+  const chartData = useMemo(
+    () => filtered.map((r) => ({ shade: r.shade, deltaE: Number(r.deltaE) || 0, result: r.result })),
+    [filtered]
+  );
+
   // Batch ↔ RMWH linkage: choosing a GRN batch auto-fills its supplier details.
   const batches = useMemo(() => Array.from(new Set(grnRecords.map((r) => r.batch).filter(Boolean))), [grnRecords]);
   const grnByBatch = useMemo(() => Object.fromEntries(grnRecords.map((r) => [r.batch, r])), [grnRecords]);
@@ -491,12 +500,12 @@ export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
         <h2 className="text-sm font-semibold mb-1">Delta E by Shade Code</h2>
         <p className="text-[11px] mb-4" style={{ color: tokens.textMuted }}>Lower is a closer match · green = Pass, red = Fail</p>
         <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={filtered} margin={{ left: -20 }}>
+          <BarChart data={chartData} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="shade" tick={{ fill: tokens.textMuted, fontSize: 9 }} axisLine={{ stroke: tokens.line }} tickLine={false} interval={0} angle={-45} textAnchor="end" height={60} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
-            <Bar dataKey="deltaE" radius={[3, 3, 0, 0]}>{filtered.map((r, i) => <Cell key={i} fill={mqaResultColor[r.result] || tokens.indigo} />)}</Bar>
+            <Bar dataKey="deltaE" radius={[3, 3, 0, 0]}>{chartData.map((r, i) => <Cell key={i} fill={mqaResultColor[r.result] || tokens.indigo} />)}</Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
