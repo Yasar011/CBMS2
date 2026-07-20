@@ -406,7 +406,44 @@ export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
     };
   };
 
-  if (results.length === 0 && !canWrite) return <EmptyState label="MQA" path="depts/MQA/results" />;
+  if (results.length === 0) return (
+    <>
+      <EmptyState label="MQA" path="depts/MQA/results" />
+      {canWrite && (
+        <div className="rounded-xl p-5 mt-4" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold">Add First MQA Result</h2>
+            {!showAdd && <AddButton label="Add Result" onClick={() => setShowAdd(true)} />}
+          </div>
+          {showAdd && (
+            <AddRecordForm
+              onCancel={() => setShowAdd(false)}
+              onSubmit={(data) => onAdd(data)}
+              autofill={autofill}
+              note="Pass/Fail, Delta E, Colour Match %, Shade Group and Recommendation are generated automatically from the Da/Db readings."
+              fields={[
+                { type: "heading", label: "Sample identification" },
+                { key: "batch", label: "GRN Batch (links to RMWH)", type: "select", options: ["", ...batches], placeholder: "— select batch —" },
+                { key: "shade", label: "Shade / Batch Shade Code", required: true },
+                { key: "style", label: "Style" },
+                { key: "colourCode", label: "Colour Code" },
+                { key: "supplier", label: "Supplier" },
+                { key: "grnNumber", label: "GRN Number" },
+                { key: "rollNumber", label: "Roll Number" },
+                { type: "heading", label: `Da readings (illuminants ${ILLUMINANTS.join(", ")})` },
+                ...ILLUMINANTS.map((L) => ({ key: `da${L}`, label: `Da — ${L}`, type: "number", required: true })),
+                { type: "heading", label: `Db readings (illuminants ${ILLUMINANTS.join(", ")})` },
+                ...ILLUMINANTS.map((L) => ({ key: `db${L}`, label: `Db — ${L}`, type: "number", required: true })),
+                { type: "heading", label: "Inspection" },
+                { key: "tester", label: "Tested By", required: true },
+                { key: "date", label: "Date", type: "date", required: true },
+              ]}
+            />
+          )}
+        </div>
+      )}
+    </>
+  );
 
   const tri = (r, p) => ILLUMINANTS.map((L) => (r[p + L] === undefined || r[p + L] === "" ? "—" : r[p + L])).join(" / ");
   const cols = ["Shade", "Batch", "Style", "Colour Code", `Da (${ILLUMINANTS.join("/")})`, `Db (${ILLUMINANTS.join("/")})`, "Avg Da", "Avg Db", "Delta E", "Match %", "Shade Group", "Mapped Std", "Result", "Recommendation", "Tested By", "Date"];
@@ -421,14 +458,15 @@ export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
         <KpiCard icon={Library} label="Shade Groups" value={library.length} sub="Master standards" accent={tokens.amber} />
       </div>
 
-      <div className="rounded-xl px-4 py-3 flex items-start gap-3" style={{ backgroundColor: tokens.indigoSoft, border: `1px solid ${tokens.indigo}44` }}>
+      <div className="rounded-xl px-4 py-3 flex items-start gap-3" style={{ backgroundColor: `${tokens.indigo}33`, border: `1px solid ${tokens.indigo}66` }}>
         <Link2 size={15} color={tokens.indigo} className="mt-0.5 shrink-0" />
-        <p className="text-xs" style={{ color: tokens.textMuted }}>
+        <p className="text-xs" style={{ color: tokens.text }}>
           Pass rule: a shade passes only when every Da and Db reading (under illuminants {ILLUMINANTS.join(", ")}) is negative.
-          Each scan is compared to the Master Shade Library; a match within tolerance is mapped to that standard's Roman-numeral
+          Each scan is compared to the Master Shade Library; a match within tolerance is mapped to that standard’s Roman-numeral
           Shade Group, keeping the original shade name for traceability. Choosing a GRN batch pulls in its supplier and style details.
         </p>
       </div>
+
 
       {library.length > 0 && (
         <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>

@@ -7,14 +7,19 @@ export function hashCode(str) {
   return h;
 }
 
-// Derives a subtle near-black hex per shade code so nominally-identical
-// "black" sub-codes are visually distinguishable.
+// Derives a distinct, visible hex colour per shade code so nominally-identical
+// "black" sub-codes are visually distinguishable in both light and dark UI themes.
+// Uses medium lightness (45–65 %) so the swatch is never invisible against a
+// dark panel (#1B2027) or a light panel (#FFFFFF).
 export function shadeHex(code) {
   const h = hashCode(code);
   const warm = h % 2 === 0;
-  const hue = warm ? 28 + (h % 20) : 215 + (h % 25);
-  const light = 7 + (h % 11);
-  const sat = 12 + (h % 18);
+  // Spread hues across warm (orange/red) and cool (blue/purple) spectrums
+  const hue = warm ? 15 + (h % 50) : 200 + (h % 60);
+  // Lightness: 45–65 % — always readable on both themes
+  const light = 45 + (h % 21);
+  // Saturation: 35–60 % — enough chroma to distinguish codes
+  const sat = 35 + (h % 26);
   const s = sat / 100, l = light / 100;
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));

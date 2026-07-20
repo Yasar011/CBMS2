@@ -33,9 +33,17 @@ export const PALETTES = {
   },
 };
 
-// Shade-tier swatches (near-black graded fabric) — same in both themes since
-// they represent the actual fabric colour, not UI chrome.
-export const gradeColor = { A: "#17181A", B: "#2B2C2E", C: "#4A4B4D", D: "#6E6F71" };
+// Shade-tier swatches — distinct, visible colours for grades A–D.
+// Previous values were near-black (#17181A, #2B2C2E …) which were
+// invisible against the dark panel background (#1B2027).
+// New values use a teal→amber→crimson progression so each tier is
+// immediately readable on both the dark and light themes.
+export const gradeColor = {
+  A: "#4C8C86",  // teal  — best match (closest to standard)
+  B: "#3B5BA5",  // indigo
+  C: "#E8A33D",  // amber
+  D: "#B23A3A",  // crimson — worst match (most off-shade)
+};
 
 // Default export kept as the dark palette for any non-component code that still
 // imports `tokens` directly.
