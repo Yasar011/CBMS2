@@ -6,7 +6,7 @@ import { useTokens } from "../tokens";
 import { objToArray } from "../lib";
 import { UserPlus, Users as UsersIcon } from "lucide-react";
 
-const DEPTS = ["RMWH", "MQA", "PLANNING", "CUTTING"];
+const DEPTS = ["RMWH", "MQA", "CUTTING"];
 
 export default function UserManagement() {
   const tokens = useTokens();

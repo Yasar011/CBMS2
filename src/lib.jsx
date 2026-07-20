@@ -38,13 +38,22 @@ export function objToArray(obj) {
   return Object.entries(obj).map(([id, v]) => ({ id, ...v }));
 }
 
-// Per the dashboard spec: from the Datacolor spectrophotometer readings the
-// dashboard derives Delta E, Colour Match %, compatibility Result and a
-// Recommendation. DECMC is the CMC total colour difference, so it is Delta E.
-export function mqaResultFor(deltaE) {
-  if (deltaE <= 0.8) return "Pass";
-  if (deltaE <= 1.2) return "Retest";
-  return "Fail";
+// ---------------- MQA shade evaluation ----------------
+// The spectrophotometer is read under three illuminants (A, F2, D65). Each
+// produces a Da (red/green) and Db (yellow/blue) delta vs. the master standard.
+export const ILLUMINANTS = ["A", "F2", "D65"];
+
+// Master-Shade-Library matching tolerance, in Da/Db signature space.
+// A scan whose average (Da, Db) falls within this distance of an existing
+// standard is mapped to that standard instead of creating a new one.
+export const SHADE_TOLERANCE = 0.5;
+
+// Pass rule (per Brandix QC): a shade passes only when every Da and Db reading
+// across all three illuminants is negative. Any non-negative reading fails.
+export function mqaResultFromDeltas(da = [], db = []) {
+  const all = [...da, ...db].map(Number).filter((v) => !isNaN(v));
+  if (all.length === 0) return "Fail";
+  return all.every((v) => v < 0) ? "Pass" : "Fail";
 }
 
 export function mqaRecommendationFor(result) {
@@ -53,15 +62,94 @@ export function mqaRecommendationFor(result) {
   return "Reject batch — re-dye required";
 }
 
-export function computeMqaDerived(data) {
-  const deltaE = Number(data.deECMC ?? data.deltaE ?? 0);
-  const result = mqaResultFor(deltaE);
+function mean(arr) {
+  const nums = arr.map(Number).filter((v) => !isNaN(v));
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+}
+
+export function toRoman(n) {
+  if (!n || n < 1) return "";
+  const map = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+  let r = "";
+  for (const [v, s] of map) while (n >= v) { r += s; n -= v; }
+  return r;
+}
+
+// The (avgDa, avgDb) signature of a scanned record.
+export function shadeSignature(data) {
+  const da = ILLUMINANTS.map((L) => Number(data[`da${L}`] ?? 0));
+  const db = ILLUMINANTS.map((L) => Number(data[`db${L}`] ?? 0));
+  return { da, db, avgDa: +mean(da).toFixed(3), avgDb: +mean(db).toFixed(3) };
+}
+
+// Build the Master Shade Library from a set of MQA results: one entry per
+// distinct Shade Group, with its centroid and the member shade names.
+export function deriveMasterLibrary(results) {
+  const groups = {};
+  for (const r of results) {
+    const g = r.shadeGroup;
+    if (!g) continue;
+    if (!groups[g]) groups[g] = { group: g, standard: r.mappedStandard || `STD-${g}`, das: [], dbs: [], shades: [], count: 0 };
+    groups[g].das.push(Number(r.avgDa ?? 0));
+    groups[g].dbs.push(Number(r.avgDb ?? 0));
+    if (r.shade && !groups[g].shades.includes(r.shade)) groups[g].shades.push(r.shade);
+    groups[g].count += 1;
+  }
+  const romanValue = (s) => toRomanValue(s);
+  return Object.values(groups)
+    .map((g) => ({ group: g.group, standard: g.standard, count: g.count, shades: g.shades, centroidDa: +mean(g.das).toFixed(3), centroidDb: +mean(g.dbs).toFixed(3) }))
+    .sort((a, b) => romanValue(a.group) - romanValue(b.group));
+}
+
+function toRomanValue(roman) {
+  const vals = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+  let total = 0, prev = 0;
+  for (let i = roman.length - 1; i >= 0; i--) {
+    const v = vals[roman[i]] || 0;
+    total += v < prev ? -v : v;
+    prev = v;
+  }
+  return total;
+}
+
+// Map a scan against the existing library. If its signature is within
+// SHADE_TOLERANCE of a known standard, reuse that standard's Roman-numeral
+// Shade Group; otherwise mint the next Roman numeral as a new standard.
+// The original shade name is always retained for traceability.
+export function assignShadeGroup(sig, library) {
+  let best = null, bestDist = Infinity;
+  for (const m of library) {
+    const d = Math.hypot(sig.avgDa - m.centroidDa, sig.avgDb - m.centroidDb);
+    if (d < bestDist) { bestDist = d; best = m; }
+  }
+  if (best && bestDist <= SHADE_TOLERANCE) {
+    return { shadeGroup: best.group, mappedStandard: best.standard, newStandard: false };
+  }
+  const nextNum = library.reduce((mx, m) => Math.max(mx, toRomanValue(m.group)), 0) + 1;
+  const group = toRoman(nextNum);
+  return { shadeGroup: group, mappedStandard: `STD-${group}`, newStandard: true };
+}
+
+// Full derivation for a new MQA record: reads Da/Db, computes Delta E, colour
+// match %, Pass/Fail, recommendation, and maps it into the Master Shade Library
+// built from the records that already exist.
+export function computeMqaDerived(data, existingResults = []) {
+  const sig = shadeSignature(data);
+  const perIllum = ILLUMINANTS.map((L, i) => Math.hypot(sig.da[i], sig.db[i]));
+  const deltaE = +mean(perIllum).toFixed(2);
+  const result = mqaResultFromDeltas(sig.da, sig.db);
+  const library = deriveMasterLibrary(existingResults);
+  const mapping = assignShadeGroup(sig, library);
   return {
-    deltaE: +deltaE.toFixed(2),
-    matchPct: +Math.max(0, Math.min(100, 100 - deltaE * 5)).toFixed(1),
+    avgDa: sig.avgDa,
+    avgDb: sig.avgDb,
+    deltaE,
+    matchPct: +Math.max(0, Math.min(100, 100 - deltaE * 10)).toFixed(1),
     result,
     recommendation: mqaRecommendationFor(result),
-    closestStandard: data.closestStandard || data.shade || "",
+    closestStandard: mapping.mappedStandard,
+    shadeGroup: mapping.shadeGroup,
+    mappedStandard: mapping.mappedStandard,
   };
 }
 

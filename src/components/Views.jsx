@@ -3,13 +3,14 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from "recharts";
 import {
-  Layers, Hash, Calendar, Building2, Filter, Palette, AlertTriangle,
+  Layers, Hash, Building2, Filter, Palette, AlertTriangle,
   PackageCheck, FlaskConical, TrendingUp, CheckCircle2, XCircle,
-  RotateCcw, ClipboardList, CalendarClock, FileText, Target, Scissors,
-  FileBarChart, Plus, X, Percent
+  FileText, Target, Scissors, FileBarChart, Plus, X,
+  Download, FileSpreadsheet, Library, Link2
 } from "lucide-react";
 import { useTokens, gradeColor } from "../tokens";
-import { KpiCard, shadeHex } from "../lib";
+import { KpiCard, shadeHex, deriveMasterLibrary, ILLUMINANTS } from "../lib";
+import { exportExcel, exportPdf } from "../exporters";
 
 const dash = (v) => (v === undefined || v === null || v === "" ? "—" : v);
 const num = (v, d = 2) => (v === undefined || v === null || v === "" || isNaN(Number(v)) ? "—" : Number(v).toFixed(d));
@@ -378,37 +379,79 @@ export function CuttingView({ dockets, onAdd, canWrite }) {
 }
 
 // ---------------- MQA ----------------
-export function MQAView({ results, onAdd, canWrite }) {
+export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
   const tokens = useTokens();
   const [resultFilter, setResultFilter] = useState("All");
   const [showAdd, setShowAdd] = useState(false);
   const filtered = useMemo(() => results.filter((r) => resultFilter === "All" || r.result === resultFilter), [results, resultFilter]);
   const mqaResultColor = { Pass: tokens.teal, Retest: tokens.amber, Fail: tokens.crimson };
   const passCount = results.filter((r) => r.result === "Pass").length;
-  const retestCount = results.filter((r) => r.result === "Retest").length;
   const failCount = results.filter((r) => r.result === "Fail").length;
   const avgDeltaE = results.length ? (results.reduce((a, r) => a + Number(r.deltaE || 0), 0) / results.length).toFixed(2) : "—";
-  const withMatch = results.filter((r) => r.matchPct !== undefined && r.matchPct !== null && r.matchPct !== "");
-  const avgMatch = withMatch.length ? (withMatch.reduce((a, r) => a + Number(r.matchPct || 0), 0) / withMatch.length).toFixed(1) : "—";
+  const library = useMemo(() => deriveMasterLibrary(results), [results]);
+
+  // Batch ↔ RMWH linkage: choosing a GRN batch auto-fills its supplier details.
+  const batches = useMemo(() => Array.from(new Set(grnRecords.map((r) => r.batch).filter(Boolean))), [grnRecords]);
+  const grnByBatch = useMemo(() => Object.fromEntries(grnRecords.map((r) => [r.batch, r])), [grnRecords]);
+  const autofill = (key, value) => {
+    if (key !== "batch") return null;
+    const g = grnByBatch[value];
+    if (!g) return null;
+    return {
+      style: g.style || "",
+      colourCode: g.colourCode || "SD BLACK 093-54A2",
+      supplier: g.supplier || "Best Pacific Textile Ltd.",
+      grnNumber: g.invoice || g.grnNumber || "",
+      shade: (g.shades && g.shades[0]) || "",
+    };
+  };
 
   if (results.length === 0 && !canWrite) return <EmptyState label="MQA" path="depts/MQA/results" />;
 
-  const cols = ["Shade Code", "GRN No", "Batch", "Roll", "DECMC", "DLCMC", "Da", "Db", "DCCMC", "DHCMC", "Delta E", "Match %", "Closest Std", "Result", "Recommendation", "Tested By", "Date"];
+  const tri = (r, p) => ILLUMINANTS.map((L) => (r[p + L] === undefined || r[p + L] === "" ? "—" : r[p + L])).join(" / ");
+  const cols = ["Shade", "Batch", "Style", "Colour Code", `Da (${ILLUMINANTS.join("/")})`, `Db (${ILLUMINANTS.join("/")})`, "Avg Da", "Avg Db", "Delta E", "Match %", "Shade Group", "Mapped Std", "Result", "Recommendation", "Tested By", "Date"];
 
   return (
     <>
       <div className="flex gap-4 flex-wrap">
         <KpiCard icon={FlaskConical} label="Samples Tested" value={results.length} sub="Live from Firebase" accent={tokens.indigo} />
         <KpiCard icon={CheckCircle2} label="Pass" value={passCount} sub={results.length ? `${((passCount / results.length) * 100).toFixed(0)}%` : ""} accent={tokens.teal} />
-        <KpiCard icon={RotateCcw} label="Retest" value={retestCount} sub="Delta E 0.8 – 1.2" accent={tokens.amber} />
-        <KpiCard icon={XCircle} label="Fail" value={failCount} sub="Delta E > 1.2" accent={tokens.crimson} />
+        <KpiCard icon={XCircle} label="Fail" value={failCount} sub="Any Da/Db ≥ 0" accent={tokens.crimson} />
         <KpiCard icon={TrendingUp} label="Avg Delta E" value={avgDeltaE} sub="Across all samples" accent={tokens.indigo} />
-        <KpiCard icon={Percent} label="Avg Colour Match" value={avgMatch === "—" ? "—" : `${avgMatch}%`} sub="Datacolor 1000" accent={tokens.teal} />
+        <KpiCard icon={Library} label="Shade Groups" value={library.length} sub="Master standards" accent={tokens.amber} />
       </div>
+
+      <div className="rounded-xl px-4 py-3 flex items-start gap-3" style={{ backgroundColor: tokens.indigoSoft, border: `1px solid ${tokens.indigo}44` }}>
+        <Link2 size={15} color={tokens.indigo} className="mt-0.5 shrink-0" />
+        <p className="text-xs" style={{ color: tokens.textMuted }}>
+          Pass rule: a shade passes only when every Da and Db reading (under illuminants {ILLUMINANTS.join(", ")}) is negative.
+          Each scan is compared to the Master Shade Library; a match within tolerance is mapped to that standard's Roman-numeral
+          Shade Group, keeping the original shade name for traceability. Choosing a GRN batch pulls in its supplier and style details.
+        </p>
+      </div>
+
+      {library.length > 0 && (
+        <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
+          <h2 className="text-sm font-semibold mb-1">Master Shade Library</h2>
+          <p className="text-[11px] mb-4" style={{ color: tokens.textMuted }}>Standard shades scans are mapped into · centroid Da/Db</p>
+          <div className="flex gap-3 flex-wrap">
+            {library.map((m) => (
+              <div key={m.group} className="rounded-lg px-3 py-2 min-w-[150px]" style={{ backgroundColor: tokens.panelAlt, border: `1px solid ${tokens.line}` }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: `${tokens.indigo}22`, color: tokens.indigo }}>Group {m.group}</span>
+                  <span className="text-[11px] font-mono" style={{ color: tokens.textMuted }}>{m.standard}</span>
+                </div>
+                <div className="text-[10px] mt-1.5 font-mono" style={{ color: tokens.textMuted }}>Da {m.centroidDa} · Db {m.centroidDb} · {m.count} scans</div>
+                <div className="text-[10px] mt-0.5" style={{ color: tokens.text }}>{m.shades.slice(0, 6).join(", ")}{m.shades.length > 6 ? "…" : ""}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
         <h2 className="text-sm font-semibold mb-1">Delta E by Shade Code</h2>
-        <p className="text-[11px] mb-4" style={{ color: tokens.textMuted }}>Lower is a closer match to the master standard (Delta E CMC)</p>
+        <p className="text-[11px] mb-4" style={{ color: tokens.textMuted }}>Lower is a closer match · green = Pass, red = Fail</p>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={results} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
@@ -425,7 +468,7 @@ export function MQAView({ results, onAdd, canWrite }) {
           <h2 className="text-sm font-semibold">Spectrophotometer Results</h2>
           <div className="flex items-center gap-2">
             <Filter size={13} color={tokens.textMuted} />
-            {["All", "Pass", "Retest", "Fail"].map((s) => (
+            {["All", "Pass", "Fail"].map((s) => (
               <button key={s} onClick={() => setResultFilter(s)} className="text-xs px-2.5 py-1 rounded-md transition-colors"
                 style={{ color: resultFilter === s ? tokens.text : tokens.textMuted, backgroundColor: resultFilter === s ? tokens.panelAlt : "transparent", border: `1px solid ${resultFilter === s ? tokens.indigo : "transparent"}` }}>
                 {s}
@@ -438,21 +481,21 @@ export function MQAView({ results, onAdd, canWrite }) {
           <AddRecordForm
             onCancel={() => setShowAdd(false)}
             onSubmit={(data) => onAdd(data)}
-            note="Delta E, Colour Match %, Result and Recommendation are generated automatically from the readings."
+            autofill={autofill}
+            note="Pass/Fail, Delta E, Colour Match %, Shade Group and Recommendation are generated automatically from the Da/Db readings."
             fields={[
               { type: "heading", label: "Sample identification" },
+              { key: "batch", label: "GRN Batch (links to RMWH)", type: "select", options: ["", ...batches], placeholder: "— select batch —" },
               { key: "shade", label: "Shade / Batch Shade Code", required: true },
+              { key: "style", label: "Style" },
+              { key: "colourCode", label: "Colour Code" },
+              { key: "supplier", label: "Supplier" },
               { key: "grnNumber", label: "GRN Number" },
-              { key: "batchNumber", label: "Batch Number" },
               { key: "rollNumber", label: "Roll Number" },
-              { key: "closestStandard", label: "Closest Matching Standard Shade" },
-              { type: "heading", label: "Spectrophotometer readings (Datacolor 1000)" },
-              { key: "deECMC", label: "DECMC (Delta E CMC)", type: "number", required: true },
-              { key: "dlCMC", label: "DLCMC", type: "number" },
-              { key: "da", label: "Da", type: "number" },
-              { key: "db", label: "Db", type: "number" },
-              { key: "dcCMC", label: "DCCMC", type: "number" },
-              { key: "dhCMC", label: "DHCMC", type: "number" },
+              { type: "heading", label: `Da readings (illuminants ${ILLUMINANTS.join(", ")})` },
+              ...ILLUMINANTS.map((L) => ({ key: `da${L}`, label: `Da — ${L}`, type: "number", required: true })),
+              { type: "heading", label: `Db readings (illuminants ${ILLUMINANTS.join(", ")})` },
+              ...ILLUMINANTS.map((L) => ({ key: `db${L}`, label: `Db — ${L}`, type: "number", required: true })),
               { type: "heading", label: "Inspection" },
               { key: "tester", label: "Tested By", required: true },
               { key: "date", label: "Date", type: "date", required: true },
@@ -466,119 +509,21 @@ export function MQAView({ results, onAdd, canWrite }) {
               {filtered.map((r) => (
                 <tr key={r.id || r.shade} style={{ borderBottom: `1px solid ${tokens.line}` }}>
                   <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap"><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: shadeHex(r.shade) }} />{dash(r.shade)}</div></td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.grnNumber)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.batchNumber)}</td>
-                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.rollNumber)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.deECMC)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.dlCMC)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.da)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.db)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.dcCMC)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.dhCMC)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.batch)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.style)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.colourCode)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{tri(r, "da")}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{tri(r, "db")}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.avgDa)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.avgDb)}</td>
                   <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.deltaE)}</td>
                   <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{r.matchPct !== undefined && r.matchPct !== "" ? `${r.matchPct}%` : "—"}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.closestStandard)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap"><span className="font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: `${tokens.indigo}22`, color: tokens.indigo }}>{dash(r.shadeGroup)}</span></td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.mappedStandard)}</td>
                   <td className="py-2.5 pr-4"><span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ color: mqaResultColor[r.result], backgroundColor: `${mqaResultColor[r.result] || tokens.line}22` }}>{dash(r.result)}</span></td>
                   <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.recommendation)}</td>
                   <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.tester)}</td>
                   <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.date)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ---------------- Planning ----------------
-export function PlanningView({ rows, onAdd, canWrite }) {
-  const tokens = useTokens();
-  const [showAdd, setShowAdd] = useState(false);
-  const totalRequired = rows.reduce((a, r) => a + Number(r.required || 0), 0);
-  const totalAllocated = rows.reduce((a, r) => a + Number(r.allocated || 0), 0);
-  const totalCutDockets = rows.reduce((a, r) => a + Number(r.cutDockets || 0), 0);
-  const fullyAllocated = rows.filter((r) => r.status === "Fully Allocated").length;
-  const planningStatusColor = { "Fully Allocated": tokens.teal, "Partial": tokens.amber, "Pending": tokens.crimson };
-
-  if (rows.length === 0 && !canWrite) return <EmptyState label="Planning" path="depts/PLANNING/rows" />;
-
-  const cols = ["Schedule", "Style", "Colour", "Components", "Marker", "Required", "Allocated", "Approx (m)", "Cut Dockets", "Body Dockets", "Plies", "Lay Length", "Marker Ratio", "Status", "Remarks"];
-
-  return (
-    <>
-      <div className="flex gap-4 flex-wrap">
-        <KpiCard icon={CalendarClock} label="Active Schedules" value={rows.length} sub="Live from Firebase" accent={tokens.indigo} />
-        <KpiCard icon={ClipboardList} label="Fabric Required" value={totalRequired.toLocaleString()} sub="Across all schedules" accent={tokens.teal} />
-        <KpiCard icon={PackageCheck} label="Fabric Allocated" value={totalAllocated.toLocaleString()} sub={totalRequired ? `${((totalAllocated / totalRequired) * 100).toFixed(0)}% of required` : ""} accent={tokens.indigo} />
-        <KpiCard icon={CheckCircle2} label="Fully Allocated" value={fullyAllocated} sub={`Of ${rows.length} schedules`} accent={tokens.teal} />
-        <KpiCard icon={Scissors} label="Cut Dockets" value={totalCutDockets || "—"} sub="Total released" accent={tokens.amber} />
-      </div>
-
-      <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
-        <h2 className="text-sm font-semibold mb-1">Required vs Allocated by Schedule</h2>
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={rows} margin={{ left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
-            <XAxis dataKey="schedule" tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={{ stroke: tokens.line }} tickLine={false} />
-            <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
-            <Bar dataKey="required" fill={tokens.line} radius={[3, 3, 0, 0]} />
-            <Bar dataKey="allocated" fill={tokens.indigo} radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold">Schedule Allocation</h2>
-          {canWrite && !showAdd && <AddButton label="Add Schedule" onClick={() => setShowAdd(true)} />}
-        </div>
-        {showAdd && (
-          <AddRecordForm
-            onCancel={() => setShowAdd(false)}
-            onSubmit={(data) => onAdd(data)}
-            fields={[
-              { key: "schedule", label: "Schedule No.", required: true },
-              { key: "style", label: "Style", required: true },
-              { key: "colour", label: "Colour", default: "SD BLACK 093 54A2" },
-              { key: "components", label: "Components" },
-              { key: "marker", label: "Marker" },
-              { key: "required", label: "Required (yd)", type: "number", required: true },
-              { key: "allocated", label: "Allocated (yd)", type: "number", required: true },
-              { key: "approxM", label: "Approx Qty (m)", type: "number" },
-              { key: "cutDockets", label: "Cut Dockets", type: "number" },
-              { key: "bodyDockets", label: "Body Dockets", type: "number" },
-              { key: "plies", label: "Number of Plies", type: "number" },
-              { key: "layLength", label: "Lay Length", type: "number" },
-              { key: "markerRatio", label: "Marker Ratio", type: "number" },
-              { key: "status", label: "Status", type: "select", options: ["Fully Allocated", "Partial", "Pending"], default: "Pending", required: true },
-              { key: "remarks", label: "Remarks", wide: true },
-            ]}
-          />
-        )}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{cols.map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id || r.schedule} style={{ borderBottom: `1px solid ${tokens.line}` }}>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.schedule)}</td>
-                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.style)}</td>
-                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.colour)}</td>
-                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.components)}</td>
-                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.marker)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{r.required !== undefined ? Number(r.required).toLocaleString() : "—"}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{r.allocated !== undefined ? Number(r.allocated).toLocaleString() : "—"}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.approxM)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.cutDockets)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.bodyDockets)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.plies)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.layLength)}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.markerRatio)}</td>
-                  <td className="py-2.5 pr-4"><span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ color: planningStatusColor[r.status], backgroundColor: `${planningStatusColor[r.status] || tokens.line}22` }}>{dash(r.status)}</span></td>
-                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.remarks)}</td>
                 </tr>
               ))}
             </tbody>
@@ -657,21 +602,24 @@ export function ExecutiveView({ grnRecords, dockets, results }) {
 }
 
 // ---------------- Reports ----------------
-export function ReportsView({ grnRecords, dockets }) {
+export function ReportsView({ grnRecords, dockets, results = [] }) {
   const tokens = useTokens();
   const [activeReport, setActiveReport] = useState("grn");
-  const shadeOccurrence = {};
-  dockets.forEach((d) => (d.shades || []).forEach((s) => {
-    const key = `${d.component}:${s}`;
-    if (!shadeOccurrence[key]) shadeOccurrence[key] = { code: s, component: d.component, count: 0 };
-    shadeOccurrence[key].count += 1;
-  }));
-  const shadeList = Object.values(shadeOccurrence).sort((a, b) => b.count - a.count);
+
+  const reports = useMemo(() => buildReports(grnRecords, dockets, results), [grnRecords, dockets, results]);
   const reportDefs = [
-    { key: "grn", label: "GRN Report", icon: PackageCheck, desc: "All live GRN records" },
-    { key: "shade", label: "Shade Compatibility Report", icon: Palette, desc: "Grade distribution & shade code fragmentation" },
+    { key: "grn", label: "GRN Report", icon: PackageCheck, desc: "All RMWH goods-receipt records" },
+    { key: "mqa", label: "Shade Inspection Report", icon: FlaskConical, desc: "Spectrophotometer results, groups & pass/fail" },
     { key: "cutting", label: "Cutting Report", icon: Scissors, desc: "Cutting dockets & fabric consumption" },
+    { key: "library", label: "Master Shade Library", icon: Library, desc: "Standard shades & their mapped scans" },
+    { key: "executive", label: "Executive Summary", icon: FileBarChart, desc: "Cross-department roll-up" },
   ];
+  const report = reports[activeReport];
+  const cell = (row, col) => {
+    const v = typeof col.key === "function" ? col.key(row) : row[col.key];
+    if (Array.isArray(v)) return v.join(", ");
+    return v === undefined || v === null || v === "" ? "—" : v;
+  };
 
   return (
     <>
@@ -680,7 +628,7 @@ export function ReportsView({ grnRecords, dockets }) {
           const Icon = r.icon;
           const isActive = activeReport === r.key;
           return (
-            <div key={r.key} onClick={() => setActiveReport(r.key)} className="rounded-xl p-4 flex-1 min-w-[220px] cursor-pointer transition-transform"
+            <div key={r.key} onClick={() => setActiveReport(r.key)} className="rounded-xl p-4 flex-1 min-w-[200px] cursor-pointer transition-transform"
               style={{ backgroundColor: isActive ? tokens.panelAlt : tokens.panel, border: `1px solid ${isActive ? tokens.indigo : tokens.line}`, transform: isActive ? "translateY(-2px)" : "none" }}>
               <div className="flex items-center gap-2 mb-2"><FileText size={14} color={tokens.textMuted} /><span className="text-[10px] uppercase tracking-wide" style={{ color: tokens.textMuted }}>Report</span></div>
               <div className="flex items-center gap-2 mb-1"><Icon size={16} color={tokens.indigo} /><span className="text-sm font-semibold">{r.label}</span></div>
@@ -690,68 +638,181 @@ export function ReportsView({ grnRecords, dockets }) {
         })}
       </div>
 
-      {activeReport === "grn" && (
-        <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
-          <h2 className="text-sm font-semibold mb-4">GRN Report</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["PO Number", "Style", "Colour Code", "Supplier", "Batch", "GRN Qty", "GRN Date", "Shades"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
-              <tbody>{grnRecords.map((r) => (
-                <tr key={r.id || r.batch} style={{ borderBottom: `1px solid ${tokens.line}` }}>
-                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.po)}</td>
-                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(r.style)}</td>
-                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(r.colourCode)}</td>
-                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(r.supplier)}</td>
-                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.batch)}</td>
-                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{num(r.qty)}</td>
-                  <td className="py-2 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.date)}</td>
-                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{(r.shades || []).join(", ") || "—"}</td>
-                </tr>
-              ))}</tbody>
-            </table>
+      <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">{report.title}</h2>
+            <p className="text-[11px] mt-0.5" style={{ color: tokens.textMuted }}>{report.subtitle}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => exportExcel(report)} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium" style={{ backgroundColor: tokens.teal, color: "#fff" }}>
+              <FileSpreadsheet size={13} /> Excel
+            </button>
+            <button onClick={() => exportPdf(report)} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium" style={{ backgroundColor: tokens.crimson, color: "#fff" }}>
+              <Download size={13} /> PDF
+            </button>
           </div>
         </div>
-      )}
 
-      {activeReport === "shade" && (
-        <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
-          <h2 className="text-sm font-semibold mb-4">Shade Compatibility Report</h2>
-          <div className="flex gap-3 flex-wrap">
-            {shadeList.map((s) => (
-              <div key={`${s.component}-${s.code}`} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ backgroundColor: tokens.panelAlt, border: `1px solid ${tokens.line}` }}>
-                <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: shadeHex(s.code) }} />
-                <span className="text-xs font-mono">{s.code}</span>
-                <span className="text-[10px]" style={{ color: tokens.textMuted }}>{s.component} · {s.count}×</span>
-              </div>
-            ))}
-          </div>
+        {/* Summary */}
+        <div className="flex gap-3 flex-wrap mt-4 mb-5">
+          {report.summary.map((s) => (
+            <div key={s.label} className="rounded-lg px-4 py-3 min-w-[150px]" style={{ backgroundColor: tokens.panelAlt, border: `1px solid ${tokens.line}` }}>
+              <div className="text-lg font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{s.value}</div>
+              <div className="text-[11px] mt-0.5" style={{ color: tokens.textMuted }}>{s.label}</div>
+            </div>
+          ))}
         </div>
-      )}
 
-      {activeReport === "cutting" && (
-        <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
-          <h2 className="text-sm font-semibold mb-4">Cutting Report</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["Docket ID", "Component", "Schedule", "Fab Code", "Lot No", "Created", "Consumption", "Total Req"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
-              <tbody>{dockets.map((d) => (
-                <tr key={d.id || d.docketId} style={{ borderBottom: `1px solid ${tokens.line}` }}>
-                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.docketId)}</td>
-                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(d.component)}</td>
-                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(d.schedule)}</td>
-                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(d.fabCode)}</td>
-                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(d.lotNo)}</td>
-                  <td className="py-2 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(d.created)}</td>
-                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.consumption)}</td>
-                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.totalRequirement)}</td>
+        {/* Detail */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{report.columns.map((c) => <th key={c.header} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{c.header}</th>)}</tr></thead>
+            <tbody>
+              {report.rows.map((row, ri) => (
+                <tr key={row.id || ri} style={{ borderBottom: `1px solid ${tokens.line}` }}>
+                  {report.columns.map((c) => <td key={c.header} className="py-2 pr-4 text-xs whitespace-nowrap">{cell(row, c)}</td>)}
                 </tr>
-              ))}</tbody>
-            </table>
-          </div>
+              ))}
+              {report.rows.length === 0 && <tr><td colSpan={report.columns.length} className="py-6 text-center text-xs" style={{ color: tokens.textMuted }}>No data for this report yet.</td></tr>}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
     </>
   );
+}
+
+// Assembles every report (title, subtitle, summary, columns, rows) from the
+// live datasets so the same shape can be rendered and exported to Excel/PDF.
+function buildReports(grnRecords, dockets, results) {
+  const shadesJoin = (r) => (r.shades || []).join(", ");
+  const library = deriveMasterLibrary(results);
+
+  // GRN
+  const grnQty = grnRecords.reduce((a, r) => a + Number(r.qty || 0), 0);
+  const grnRolls = grnRecords.reduce((a, r) => a + Number(r.rolls || 0), 0);
+  const grn = {
+    title: "GRN Report",
+    subtitle: "RMWH — all goods-receipt records",
+    summary: [
+      { label: "GRN Records", value: grnRecords.length },
+      { label: "Total GRN Qty", value: grnQty.toLocaleString(undefined, { minimumFractionDigits: 2 }) },
+      { label: "Purchase Orders", value: new Set(grnRecords.map((r) => r.po)).size },
+      { label: "Styles", value: new Set(grnRecords.map((r) => r.style).filter(Boolean)).size },
+      { label: "Rolls Received", value: grnRolls || "—" },
+    ],
+    columns: [
+      { header: "PO Number", key: "po" }, { header: "Buyer", key: "buyer" }, { header: "Style", key: "style" },
+      { header: "Schedule", key: "schedule" }, { header: "Category", key: "category" }, { header: "Colour Code", key: "colourCode" },
+      { header: "Supplier", key: "supplier" }, { header: "Batch", key: "batch" }, { header: "Invoice", key: "invoice" },
+      { header: "Lay Job", key: "layJob" }, { header: "GRN Date", key: "date" }, { header: "Roll No", key: "rollNo" },
+      { header: "Rolls", key: "rolls" }, { header: "GRN Qty", key: "qty" }, { header: "Composition", key: "composition" },
+      { header: "Proc. Group", key: "procurementGroup" }, { header: "Fabric Type", key: "fabricType" }, { header: "Shades", key: shadesJoin },
+    ],
+    rows: grnRecords,
+  };
+
+  // MQA / Shade Inspection
+  const pass = results.filter((r) => r.result === "Pass").length;
+  const fail = results.filter((r) => r.result === "Fail").length;
+  const avgDe = results.length ? (results.reduce((a, r) => a + Number(r.deltaE || 0), 0) / results.length).toFixed(2) : "—";
+  const withMatch = results.filter((r) => r.matchPct !== undefined && r.matchPct !== "");
+  const avgMatch = withMatch.length ? (withMatch.reduce((a, r) => a + Number(r.matchPct || 0), 0) / withMatch.length).toFixed(1) + "%" : "—";
+  const mqa = {
+    title: "Shade Inspection Report",
+    subtitle: "MQA — spectrophotometer results (Da/Db under A, F2, D65)",
+    summary: [
+      { label: "Samples", value: results.length },
+      { label: "Pass", value: pass },
+      { label: "Fail", value: fail },
+      { label: "Pass Rate", value: results.length ? `${((pass / results.length) * 100).toFixed(0)}%` : "—" },
+      { label: "Avg Delta E", value: avgDe },
+      { label: "Avg Match", value: avgMatch },
+      { label: "Shade Groups", value: library.length },
+    ],
+    columns: [
+      { header: "Shade", key: "shade" }, { header: "Batch", key: "batch" }, { header: "Style", key: "style" },
+      { header: "Colour Code", key: "colourCode" }, { header: "GRN No", key: "grnNumber" }, { header: "Roll", key: "rollNumber" },
+      { header: "Da A", key: "daA" }, { header: "Da F2", key: "daF2" }, { header: "Da D65", key: "daD65" },
+      { header: "Db A", key: "dbA" }, { header: "Db F2", key: "dbF2" }, { header: "Db D65", key: "dbD65" },
+      { header: "Avg Da", key: "avgDa" }, { header: "Avg Db", key: "avgDb" }, { header: "Delta E", key: "deltaE" },
+      { header: "Match %", key: "matchPct" }, { header: "Shade Group", key: "shadeGroup" }, { header: "Mapped Std", key: "mappedStandard" },
+      { header: "Result", key: "result" }, { header: "Recommendation", key: "recommendation" }, { header: "Tested By", key: "tester" }, { header: "Date", key: "date" },
+    ],
+    rows: results,
+  };
+
+  // Cutting
+  const bodyDockets = dockets.filter((d) => d.component === "Body");
+  const avgBody = bodyDockets.length ? (bodyDockets.reduce((a, d) => a + Number(d.consumption || 0), 0) / bodyDockets.length).toFixed(4) : "—";
+  const subCodes = new Set(dockets.flatMap((d) => (d.shades || []).map((s) => `${d.component}:${s}`))).size;
+  const cutting = {
+    title: "Cutting Report",
+    subtitle: "Cutting — dockets & fabric consumption",
+    summary: [
+      { label: "Dockets", value: dockets.length },
+      { label: "Schedules", value: new Set(dockets.flatMap((d) => (d.schedule || "").split(",").map((s) => s.trim()).filter(Boolean))).size },
+      { label: "Shade Sub-codes", value: subCodes },
+      { label: "Avg Body Consumption", value: avgBody },
+      { label: "Total Allocated Qty", value: dockets.reduce((a, d) => a + Number(d.allocatedQty || 0), 0) || "—" },
+    ],
+    columns: [
+      { header: "Docket ID", key: "docketId" }, { header: "CO", key: "co" }, { header: "Component", key: "component" },
+      { header: "Comp Group", key: "componentGroup" }, { header: "Style", key: "styleNo" }, { header: "Category", key: "category" },
+      { header: "Schedule", key: "schedule" }, { header: "Shades", key: shadesJoin }, { header: "Fabric Code", key: "fabCode" },
+      { header: "Fabric Color", key: "fabricColor" }, { header: "Lot No", key: "lotNo" }, { header: "Lay Job", key: "layJob" },
+      { header: "Created", key: "created" }, { header: "Consumption", key: "consumption" }, { header: "Binding Cons", key: "bindingConsumption" },
+      { header: "Total Req", key: "totalRequirement" }, { header: "Allocated Qty", key: "allocatedQty" },
+      { header: "Purchase Width", key: "purchaseWidth" }, { header: "Actual Width", key: "actualWidth" }, { header: "Cut Length", key: "cutLength" }, { header: "Cut Width", key: "cutWidth" },
+    ],
+    rows: dockets,
+  };
+
+  // Master Shade Library
+  const libraryReport = {
+    title: "Master Shade Library",
+    subtitle: "Standard shades and the scans mapped into each Roman-numeral group",
+    summary: [
+      { label: "Shade Groups", value: library.length },
+      { label: "Total Scans Mapped", value: library.reduce((a, m) => a + m.count, 0) },
+      { label: "Distinct Shade Names", value: new Set(results.map((r) => r.shade)).size },
+    ],
+    columns: [
+      { header: "Shade Group", key: "group" }, { header: "Mapped Standard", key: "standard" },
+      { header: "Centroid Da", key: "centroidDa" }, { header: "Centroid Db", key: "centroidDb" },
+      { header: "Scan Count", key: "count" }, { header: "Member Shades", key: (m) => m.shades },
+    ],
+    rows: library,
+  };
+
+  // Executive summary
+  const executive = {
+    title: "Executive Summary",
+    subtitle: "Cross-department roll-up · SD BLACK 093 54A2",
+    summary: [
+      { label: "GRN Qty", value: grnQty.toLocaleString(undefined, { minimumFractionDigits: 2 }) },
+      { label: "Cutting Dockets", value: dockets.length },
+      { label: "MQA Samples", value: results.length },
+      { label: "MQA Pass Rate", value: results.length ? `${((pass / results.length) * 100).toFixed(0)}%` : "—" },
+      { label: "Shade Groups", value: library.length },
+    ],
+    columns: [{ header: "Metric", key: "metric" }, { header: "Value", key: "value" }],
+    rows: [
+      { metric: "GRN records", value: grnRecords.length },
+      { metric: "Total GRN quantity", value: grnQty.toFixed(2) },
+      { metric: "Purchase orders", value: new Set(grnRecords.map((r) => r.po)).size },
+      { metric: "Cutting dockets", value: dockets.length },
+      { metric: "Distinct shade sub-codes (cutting)", value: subCodes },
+      { metric: "MQA samples tested", value: results.length },
+      { metric: "MQA pass", value: pass },
+      { metric: "MQA fail", value: fail },
+      { metric: "Average Delta E", value: avgDe },
+      { metric: "Master shade groups", value: library.length },
+    ],
+  };
+
+  return { grn, mqa, cutting, library: libraryReport, executive };
 }
 
 // ---------------- shared bits ----------------
@@ -781,13 +842,22 @@ function AddButton({ label, onClick }) {
 // Generic add-record form. `fields` describes each input; a field with
 // type "heading" renders a full-width section label. onSubmit receives the
 // built record object (numbers/lists coerced, empty values omitted).
-function AddRecordForm({ fields, onSubmit, onCancel, note }) {
+function AddRecordForm({ fields, onSubmit, onCancel, note, autofill }) {
   const tokens = useTokens();
   const [values, setValues] = useState(() =>
     Object.fromEntries(fields.filter((f) => f.type !== "heading").map((f) => [f.key, f.default ?? ""]))
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  // Update one field; if a parent supplied an autofill map, merge its patch too.
+  const change = (key, value) => {
+    setValues((prev) => {
+      const next = { ...prev, [key]: value };
+      const patch = autofill ? autofill(key, value, next) : null;
+      return patch ? { ...next, ...patch } : next;
+    });
+  };
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -827,9 +897,9 @@ function AddRecordForm({ fields, onSubmit, onCancel, note }) {
           <div key={f.key} className={f.wide ? "col-span-2" : ""}>
             <label className="text-[11px]" style={{ color: tokens.textMuted }}>{f.label}</label>
             {f.type === "select" ? (
-              <select value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+              <select value={values[f.key]} onChange={(e) => change(f.key, e.target.value)}
                 className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.text }}>
-                {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                {f.options.map((o) => <option key={o} value={o}>{o === "" ? (f.placeholder || "—") : o}</option>)}
               </select>
             ) : (
               <input
@@ -837,7 +907,7 @@ function AddRecordForm({ fields, onSubmit, onCancel, note }) {
                 type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
                 step={f.type === "number" ? "any" : undefined}
                 value={values[f.key]}
-                onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                onChange={(e) => change(f.key, e.target.value)}
                 placeholder={f.placeholder}
                 className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
                 style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.text }}

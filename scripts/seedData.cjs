@@ -75,25 +75,73 @@ const dockets = [
   { docketId: "191947", layJob: "115754", schedule: "55736, 55737", component: "CFL+Binding", category: "CG2", shades: ["A7", "A144", "A3", "A5", "A143"], fabCode: "FWRP00018", created: "2026-07-07", consumption: 0.0018 },
 ];
 
-// ---- MQA + Planning: illustrative, until a real export is provided ----
-function hashCode(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; }
-const testers = ["N. Perera", "S. Fernando", "K. Jayasuriya"];
-const allShades = Array.from(new Set([...grnRecords.flatMap((r) => r.shades), ...dockets.flatMap((d) => d.shades)]));
-const mqaResults = allShades.map((code) => {
-  const de = +(0.25 + (hashCode(code) % 140) / 100).toFixed(2);
-  const result = de <= 0.8 ? "Pass" : de <= 1.2 ? "Retest" : "Fail";
-  return { shade: code, deltaE: de, result, tester: testers[hashCode(code) % testers.length], date: ["2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"][hashCode(code + "d") % 5] };
-});
+// ---- MQA: illustrative spectrophotometer data, until a real export is provided ----
+// Da/Db are read under three illuminants (A, F2, D65). Pass rule: every Da and
+// Db reading must be negative. Each scan is greedily mapped into a Master Shade
+// Library, assigning a Roman-numeral Shade Group while keeping the shade name.
+const ILLUMINANTS = ["A", "F2", "D65"];
+const SHADE_TOL = 0.5;
+const _mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+function toRoman(n) {
+  const map = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+  let r = ""; for (const [v, s] of map) while (n >= v) { r += s; n -= v; } return r;
+}
+const _rnd = (min, max) => +(min + Math.random() * (max - min));
+function genReadings(pass) {
+  const keys = ["daA", "daF2", "daD65", "dbA", "dbF2", "dbD65"];
+  const v = {};
+  if (pass) keys.forEach((k) => (v[k] = +_rnd(-0.9, -0.05).toFixed(2)));
+  else {
+    keys.forEach((k) => (v[k] = +_rnd(-0.6, 0.6).toFixed(2)));
+    if (keys.every((k) => v[k] < 0)) { const k = keys[Math.floor(Math.random() * keys.length)]; v[k] = +_rnd(0.02, 0.5).toFixed(2); }
+  }
+  return v;
+}
 
-const scheduleSet = Array.from(new Set(dockets.flatMap((d) => d.schedule.split(",").map((s) => s.trim()))));
-const planningRows = scheduleSet.map((sch) => {
-  const related = dockets.filter((d) => d.schedule.includes(sch));
-  const h = hashCode(sch);
-  const required = 800 + (h % 1400);
-  const allocatedPct = 55 + (h % 46);
-  const allocated = Math.round(required * (allocatedPct / 100));
-  const status = allocatedPct >= 95 ? "Fully Allocated" : allocatedPct >= 75 ? "Partial" : "Pending";
-  return { schedule: sch, style: "PN45159H60", components: Array.from(new Set(related.map((d) => d.component))).join(", ") || "—", required, allocated, status };
+const testers = ["N. Perera", "S. Fernando", "K. Jayasuriya"];
+const dates = ["2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
+const allShades = Array.from(new Set([...grnRecords.flatMap((r) => r.shades), ...dockets.flatMap((d) => d.shades)]));
+const rmwhByShade = {};
+grnRecords.forEach((r) => (r.shades || []).forEach((s) => { if (!rmwhByShade[s]) rmwhByShade[s] = r; }));
+
+const masters = [];
+const mqaResults = allShades.map((shade, idx) => {
+  const pass = Math.random() < 0.6;
+  const rd = genReadings(pass);
+  const da = [rd.daA, rd.daF2, rd.daD65];
+  const db = [rd.dbA, rd.dbF2, rd.dbD65];
+  const avgDa = +_mean(da).toFixed(3), avgDb = +_mean(db).toFixed(3);
+  const deltaE = +_mean(ILLUMINANTS.map((L, i) => Math.hypot(da[i], db[i]))).toFixed(2);
+  const result = [...da, ...db].every((v) => v < 0) ? "Pass" : "Fail";
+  const matchPct = +Math.max(0, Math.min(100, 100 - deltaE * 10)).toFixed(1);
+
+  let best = null, bd = Infinity;
+  masters.forEach((m) => { const d = Math.hypot(avgDa - m.cDa, avgDb - m.cDb); if (d < bd) { bd = d; best = m; } });
+  let group, standard;
+  if (best && bd <= SHADE_TOL) {
+    group = best.group; standard = best.standard;
+    best.das.push(avgDa); best.dbs.push(avgDb); best.cDa = _mean(best.das); best.cDb = _mean(best.dbs);
+  } else {
+    group = toRoman(masters.length + 1); standard = "STD-" + group;
+    masters.push({ group, standard, das: [avgDa], dbs: [avgDb], cDa: avgDa, cDb: avgDb });
+  }
+
+  const rec = rmwhByShade[shade];
+  return {
+    shade,
+    batch: rec ? rec.batch : "",
+    style: rec ? rec.style : "",
+    colourCode: rec ? "SD BLACK 093-54A2" : "",
+    supplier: rec ? "Best Pacific Textile Ltd." : "",
+    grnNumber: rec ? rec.invoice : "",
+    rollNumber: "",
+    ...rd,
+    avgDa, avgDb, deltaE, matchPct, result,
+    recommendation: result === "Pass" ? "Approve & standardize shade" : "Reject batch — re-dye required",
+    shadeGroup: group, mappedStandard: standard, closestStandard: standard,
+    tester: testers[idx % testers.length],
+    date: dates[idx % dates.length],
+  };
 });
 
 async function seed() {
@@ -112,7 +160,7 @@ async function seed() {
   await db.ref("depts/RMWH/grn").set(grnRecords);
   await db.ref("depts/CUTTING/dockets").set(dockets);
   await db.ref("depts/MQA/results").set(mqaResults);
-  await db.ref("depts/PLANNING/rows").set(planningRows);
+  await db.ref("depts/PLANNING").remove();
 
   console.log(`Seed complete. Sign in with ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   process.exit(0);

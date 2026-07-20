@@ -5,6 +5,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 export const PALETTES = {
   dark: {
     bg: "#12151A",
+    sidebar: "#0F1216",
     panel: "#1B2027",
     panelAlt: "#20262E",
     line: "#2C333C",
@@ -18,6 +19,7 @@ export const PALETTES = {
   },
   light: {
     bg: "#F4F5F7",
+    sidebar: "#FFFFFF",
     panel: "#FFFFFF",
     panelAlt: "#EEF1F5",
     line: "#D9DDE3",

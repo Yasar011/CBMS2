@@ -5,18 +5,17 @@ import { useAuth } from "../AuthContext";
 import { useTokens, useTheme } from "../tokens";
 import { objToArray, computeMqaDerived } from "../lib";
 import {
-  LayoutDashboard, Warehouse, FlaskConical, CalendarClock, Scissors,
-  FileBarChart, Settings, Bell, ChevronDown, LogOut, Users as UsersIcon,
+  LayoutDashboard, Warehouse, FlaskConical, Scissors,
+  FileBarChart, Bell, ChevronDown, LogOut, Users as UsersIcon,
   Sun, Moon
 } from "lucide-react";
-import { RMWHView, CuttingView, MQAView, PlanningView, ExecutiveView, ReportsView } from "./Views";
+import { RMWHView, CuttingView, MQAView, ExecutiveView, ReportsView } from "./Views";
 import UserManagement from "./UserManagement";
 
 const ALL_NAV = [
   { key: "executive", label: "Executive", icon: LayoutDashboard, dept: "ALL" },
   { key: "rmwh", label: "RMWH", icon: Warehouse, dept: "RMWH" },
   { key: "mqa", label: "MQA", icon: FlaskConical, dept: "MQA" },
-  { key: "planning", label: "Planning", icon: CalendarClock, dept: "PLANNING" },
   { key: "cutting", label: "Cutting", icon: Scissors, dept: "CUTTING" },
   { key: "reports", label: "Reports", icon: FileBarChart, dept: "ALL" },
 ];
@@ -42,7 +41,6 @@ export default function Dashboard() {
   const grnRecords = useDbList("depts/RMWH/grn", isAdmin || dept === "RMWH");
   const dockets = useDbList("depts/CUTTING/dockets", isAdmin || dept === "CUTTING");
   const mqaResults = useDbList("depts/MQA/results", isAdmin || dept === "MQA");
-  const planningRows = useDbList("depts/PLANNING/rows", isAdmin || dept === "PLANNING");
 
   const visibleNav = isAdmin ? ALL_NAV : ALL_NAV.filter((n) => n.dept === dept);
   const [activeKey, setActiveKey] = useState(visibleNav[0]?.key || "rmwh");
@@ -56,7 +54,6 @@ export default function Dashboard() {
     executive: "Executive Dashboard",
     rmwh: "RMWH — Black Colour Batch Details",
     mqa: "Material Quality Assurance",
-    planning: "Planning",
     cutting: "Cutting Dashboard",
     reports: "Reports",
   };
@@ -64,7 +61,7 @@ export default function Dashboard() {
   return (
     <div className="w-full min-h-[900px] flex" style={{ backgroundColor: tokens.bg, color: tokens.text, fontFamily: "'Inter', sans-serif" }}>
       {/* Sidebar */}
-      <div className="w-56 shrink-0 flex flex-col py-6 px-3" style={{ backgroundColor: "#0F1216", borderRight: `1px solid ${tokens.line}` }}>
+      <div className="w-56 shrink-0 flex flex-col py-6 px-3" style={{ backgroundColor: tokens.sidebar, borderRight: `1px solid ${tokens.line}` }}>
         <div className="px-2 mb-8">
           <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: tokens.textMuted }}>Brandix · Unit 4</div>
           <div className="text-lg font-semibold mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Shade Control</div>
@@ -126,9 +123,8 @@ export default function Dashboard() {
           {!showUsers && activeKey === "executive" && <ExecutiveView grnRecords={grnRecords} dockets={dockets} results={mqaResults} />}
           {!showUsers && activeKey === "rmwh" && <RMWHView grnRecords={grnRecords} canWrite={isAdmin || dept === "RMWH"} onAdd={(data) => addRecord("depts/RMWH/grn", data)} />}
           {!showUsers && activeKey === "cutting" && <CuttingView dockets={dockets} canWrite={isAdmin || dept === "CUTTING"} onAdd={(data) => addRecord("depts/CUTTING/dockets", data)} />}
-          {!showUsers && activeKey === "mqa" && <MQAView results={mqaResults} canWrite={isAdmin || dept === "MQA"} onAdd={(data) => addRecord("depts/MQA/results", { ...data, ...computeMqaDerived(data) })} />}
-          {!showUsers && activeKey === "planning" && <PlanningView rows={planningRows} canWrite={isAdmin || dept === "PLANNING"} onAdd={(data) => addRecord("depts/PLANNING/rows", data)} />}
-          {!showUsers && activeKey === "reports" && <ReportsView grnRecords={grnRecords} dockets={dockets} />}
+          {!showUsers && activeKey === "mqa" && <MQAView results={mqaResults} grnRecords={grnRecords} canWrite={isAdmin || dept === "MQA"} onAdd={(data) => addRecord("depts/MQA/results", { ...data, ...computeMqaDerived(data, mqaResults) })} />}
+          {!showUsers && activeKey === "reports" && <ReportsView grnRecords={grnRecords} dockets={dockets} results={mqaResults} />}
         </div>
       </div>
     </div>

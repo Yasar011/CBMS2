@@ -1,7 +1,13 @@
 # Brandix Unit 4 — Shade Control
 
-Digital Shade Management dashboard (RMWH, Cutting, MQA, Planning, Executive, Reports),
+Digital Shade Management dashboard (RMWH, Cutting, MQA, Executive, Reports),
 backed by Firebase Realtime Database with login and department-scoped access.
+
+MQA scans are read on the Datacolor spectrophotometer under three illuminants (A, F2, D65);
+a shade passes only when every Da and Db reading is negative. Each scan is mapped into a Master
+Shade Library — matches within tolerance reuse an existing standard and its Roman-numeral Shade
+Group, while the original shade name is retained for traceability. Reports can be downloaded as
+Excel or PDF.
 
 ## 1. Install
 
@@ -46,18 +52,17 @@ This creates the super admin account **admin@brandix.local / Brandix123** and wr
 npm run dev
 ```
 
-Sign in as `admin@brandix.local` / `123`. From the **Users** tab, create accounts for each
-department (RMWH, MQA, Planning, Cutting) — those users will only see their own department's
+Sign in as `admin@brandix.local` / `Brandix123`. From the **Users** tab, create accounts for each
+department (RMWH, MQA, Cutting) — those users will only see their own department's
 dashboard. Admins see everything, including Executive and Reports.
 
 ## Data model
 
 ```
-/users/{uid}         → { name, email, role: "admin"|"user", dept: "RMWH"|"MQA"|"PLANNING"|"CUTTING"|"ALL" }
+/users/{uid}         → { name, email, role: "admin"|"user", dept: "RMWH"|"MQA"|"CUTTING"|"ALL" }
 /depts/RMWH/grn       → GRN records
 /depts/CUTTING/dockets → cutting docket records
-/depts/MQA/results     → spectrophotometer results
-/depts/PLANNING/rows   → schedule allocation records
+/depts/MQA/results     → spectrophotometer results (Da/Db per illuminant, shade group)
 ```
 
 The dashboard reads live from these paths — edit data directly in the Firebase Console, or write
@@ -76,7 +81,6 @@ git push -u origin main
 ## Notes on what's real vs. illustrative
 
 - **RMWH** and **Cutting** data are transcribed from the documents you uploaded.
-- **MQA** and **Planning** data are illustrative — generated from the real shade codes and
-  schedules already present, since no spectrophotometer or planning export was provided yet.
-  Replace `depts/MQA/results` and `depts/PLANNING/rows` in Firebase with real exports when you
-  have them; the dashboard needs no code changes to pick them up.
+- **MQA** data is illustrative — random Da/Db readings generated for the real shade codes already
+  present, since no spectrophotometer export was provided yet. Replace `depts/MQA/results` in
+  Firebase with a real export when you have one; the dashboard needs no code changes to pick it up.
