@@ -2,11 +2,12 @@ import React, { useEffect, useState } from "react";
 import { ref, onValue, push, set } from "firebase/database";
 import { db } from "../firebase";
 import { useAuth } from "../AuthContext";
-import { tokens } from "../tokens";
-import { objToArray } from "../lib";
+import { useTokens, useTheme } from "../tokens";
+import { objToArray, computeMqaDerived } from "../lib";
 import {
   LayoutDashboard, Warehouse, FlaskConical, CalendarClock, Scissors,
-  FileBarChart, Settings, Bell, ChevronDown, LogOut, Users as UsersIcon
+  FileBarChart, Settings, Bell, ChevronDown, LogOut, Users as UsersIcon,
+  Sun, Moon
 } from "lucide-react";
 import { RMWHView, CuttingView, MQAView, PlanningView, ExecutiveView, ReportsView } from "./Views";
 import UserManagement from "./UserManagement";
@@ -32,6 +33,8 @@ function useDbList(path, enabled) {
 
 export default function Dashboard() {
   const { profile, logout } = useAuth();
+  const tokens = useTokens();
+  const { theme, toggle } = useTheme();
   const isAdmin = profile?.role === "admin";
   const dept = profile?.dept;
 
@@ -101,6 +104,9 @@ export default function Dashboard() {
             <p className="text-xs mt-0.5" style={{ color: tokens.textMuted }}>SD BLACK 093 5A2/54A2 · style PN45159H60/F60/F61</p>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={toggle} aria-label="Toggle theme" className="rounded-lg p-2" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
+              {theme === "dark" ? <Sun size={16} color={tokens.textMuted} /> : <Moon size={16} color={tokens.textMuted} />}
+            </button>
             <div className="rounded-lg p-2" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
               <Bell size={16} color={tokens.textMuted} />
             </div>
@@ -120,7 +126,7 @@ export default function Dashboard() {
           {!showUsers && activeKey === "executive" && <ExecutiveView grnRecords={grnRecords} dockets={dockets} results={mqaResults} />}
           {!showUsers && activeKey === "rmwh" && <RMWHView grnRecords={grnRecords} canWrite={isAdmin || dept === "RMWH"} onAdd={(data) => addRecord("depts/RMWH/grn", data)} />}
           {!showUsers && activeKey === "cutting" && <CuttingView dockets={dockets} canWrite={isAdmin || dept === "CUTTING"} onAdd={(data) => addRecord("depts/CUTTING/dockets", data)} />}
-          {!showUsers && activeKey === "mqa" && <MQAView results={mqaResults} canWrite={isAdmin || dept === "MQA"} onAdd={(data) => addRecord("depts/MQA/results", data)} />}
+          {!showUsers && activeKey === "mqa" && <MQAView results={mqaResults} canWrite={isAdmin || dept === "MQA"} onAdd={(data) => addRecord("depts/MQA/results", { ...data, ...computeMqaDerived(data) })} />}
           {!showUsers && activeKey === "planning" && <PlanningView rows={planningRows} canWrite={isAdmin || dept === "PLANNING"} onAdd={(data) => addRecord("depts/PLANNING/rows", data)} />}
           {!showUsers && activeKey === "reports" && <ReportsView grnRecords={grnRecords} dockets={dockets} />}
         </div>

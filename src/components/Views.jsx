@@ -6,27 +6,32 @@ import {
   Layers, Hash, Calendar, Building2, Filter, Palette, AlertTriangle,
   PackageCheck, FlaskConical, TrendingUp, CheckCircle2, XCircle,
   RotateCcw, ClipboardList, CalendarClock, FileText, Target, Scissors,
-  FileBarChart, Plus, X
+  FileBarChart, Plus, X, Percent
 } from "lucide-react";
-import { tokens, gradeColor } from "../tokens";
+import { useTokens, gradeColor } from "../tokens";
 import { KpiCard, shadeHex } from "../lib";
+
+const dash = (v) => (v === undefined || v === null || v === "" ? "—" : v);
+const num = (v, d = 2) => (v === undefined || v === null || v === "" || isNaN(Number(v)) ? "—" : Number(v).toFixed(d));
 
 // ---------------- RMWH ----------------
 export function RMWHView({ grnRecords, onAdd, canWrite }) {
+  const tokens = useTokens();
   const [styleFilter, setStyleFilter] = useState("All");
   const [gradeFilter, setGradeFilter] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
 
-  const styles = useMemo(() => Array.from(new Set(grnRecords.map((r) => r.style))), [grnRecords]);
-  const totalQty = grnRecords.reduce((a, r) => a + r.qty, 0);
+  const styles = useMemo(() => Array.from(new Set(grnRecords.map((r) => r.style).filter(Boolean))), [grnRecords]);
+  const totalQty = grnRecords.reduce((a, r) => a + Number(r.qty || 0), 0);
+  const totalRolls = grnRecords.reduce((a, r) => a + Number(r.rolls || 0), 0);
   const uniquePOs = new Set(grnRecords.map((r) => r.po)).size;
-  const uniqueStyles = new Set(grnRecords.map((r) => r.style)).size;
+  const uniqueStyles = styles.length;
 
   const gradeCounts = { A: 0, B: 0, C: 0, D: 0 };
   let totalGraded = 0;
   grnRecords.forEach((r) => (r.shades || []).forEach((s) => { gradeCounts[s[0]] = (gradeCounts[s[0]] || 0) + 1; totalGraded += 1; }));
   const gradeChartData = ["A", "B", "C", "D"].map((g) => ({ grade: g, count: gradeCounts[g] || 0 }));
-  const batchQtyData = grnRecords.map((r) => ({ batch: r.batch.length > 10 ? r.batch.slice(0, 9) + "…" : r.batch, qty: r.qty }));
+  const batchQtyData = grnRecords.map((r) => ({ batch: (r.batch || "").length > 10 ? r.batch.slice(0, 9) + "…" : r.batch, qty: Number(r.qty || 0) }));
 
   const filtered = useMemo(() => grnRecords.filter((r) => {
     const styleOk = styleFilter === "All" || r.style === styleFilter;
@@ -36,13 +41,16 @@ export function RMWHView({ grnRecords, onAdd, canWrite }) {
 
   if (grnRecords.length === 0 && !canWrite) return <EmptyState label="RMWH" path="depts/RMWH/grn" />;
 
+  const cols = ["PO Number", "Buyer", "Style", "Schedule", "Category", "Colour Code", "Supplier", "Batch", "Invoice", "Lay Job", "GRN Date", "Roll No", "Rolls", "GRN Qty", "Composition", "Proc. Group", "Fabric Type", "Shades"];
+
   return (
     <>
       <div className="flex gap-4 flex-wrap">
         <KpiCard icon={PackageCheck} label="GRN Records" value={grnRecords.length} sub="Live from Firebase" accent={tokens.teal} />
         <KpiCard icon={Layers} label="Total GRN Qty" value={totalQty.toLocaleString(undefined, { minimumFractionDigits: 2 })} sub="All records" accent={tokens.indigo} />
         <KpiCard icon={Hash} label="Purchase Orders" value={uniquePOs} sub="Distinct POs" accent={tokens.amber} />
-        <KpiCard icon={Building2} label="Styles Covered" value={uniqueStyles} sub={styles.join(", ")} accent={tokens.teal} />
+        <KpiCard icon={Building2} label="Styles Covered" value={uniqueStyles} sub={styles.join(", ") || "—"} accent={tokens.teal} />
+        <KpiCard icon={Layers} label="Rolls Received" value={totalRolls || "—"} sub="Number of rolls" accent={tokens.indigo} />
       </div>
 
       <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
@@ -51,7 +59,7 @@ export function RMWHView({ grnRecords, onAdd, canWrite }) {
             <h2 className="text-sm font-semibold">Shade Grade Distribution</h2>
             <p className="text-xs mt-0.5" style={{ color: tokens.textMuted }}>Grade A = closest match to standard · Grade D = most off-shade — click a tier to filter</p>
           </div>
-          {gradeFilter && <button onClick={() => setGradeFilter(null)} className="text-xs px-2.5 py-1 rounded-md" style={{ color: tokens.amber, backgroundColor: "#E8A33D18" }}>Clear filter</button>}
+          {gradeFilter && <button onClick={() => setGradeFilter(null)} className="text-xs px-2.5 py-1 rounded-md" style={{ color: tokens.amber, backgroundColor: `${tokens.amber}18` }}>Clear filter</button>}
         </div>
         <div className="flex gap-4 mt-4 flex-wrap">
           {gradeChartData.map((g) => {
@@ -79,7 +87,7 @@ export function RMWHView({ grnRecords, onAdd, canWrite }) {
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="grade" tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={{ stroke: tokens.line }} tickLine={false} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: tokens.text }} />
+            <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
             <Bar dataKey="count" radius={[4, 4, 0, 0]}>{gradeChartData.map((g, i) => <Cell key={i} fill={gradeColor[g.grade]} />)}</Bar>
           </BarChart>
         </ChartCard>
@@ -88,7 +96,7 @@ export function RMWHView({ grnRecords, onAdd, canWrite }) {
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="batch" tick={{ fill: tokens.textMuted, fontSize: 9 }} axisLine={{ stroke: tokens.line }} tickLine={false} interval={0} angle={-35} textAnchor="end" height={60} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: tokens.text }} />
+            <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
             <Bar dataKey="qty" radius={[4, 4, 0, 0]} fill={tokens.indigo} />
           </BarChart>
         </ChartCard>
@@ -113,28 +121,50 @@ export function RMWHView({ grnRecords, onAdd, canWrite }) {
             onCancel={() => setShowAdd(false)}
             onSubmit={(data) => onAdd(data)}
             fields={[
-              { key: "po", label: "PO Number" },
-              { key: "style", label: "Style" },
-              { key: "batch", label: "Batch Number" },
+              { key: "po", label: "PO Number", required: true },
+              { key: "buyer", label: "Buyer Name" },
+              { key: "style", label: "Style Number", required: true },
+              { key: "schedule", label: "Schedule" },
+              { key: "category", label: "Category" },
+              { key: "colourCode", label: "Colour Code", default: "SD BLACK 093-54A2" },
+              { key: "supplier", label: "Supplier Name", default: "Best Pacific Textile Ltd." },
+              { key: "batch", label: "Supplier Batch Number", required: true },
               { key: "invoice", label: "Invoice Number" },
-              { key: "qty", label: "GRN Qty", type: "number" },
-              { key: "date", label: "GRN Date", type: "date" },
-              { key: "shades", label: "Shades (comma-separated)", type: "list", placeholder: "A7, B7", wide: true },
+              { key: "layJob", label: "Lay Job No." },
+              { key: "date", label: "GRN Date", type: "date", required: true },
+              { key: "rollNo", label: "Roll Number" },
+              { key: "rolls", label: "Number of Rolls Received", type: "number" },
+              { key: "qty", label: "Roll Quantity (m/yd)", type: "number", required: true },
+              { key: "composition", label: "Fabric Composition" },
+              { key: "procurementGroup", label: "Procurement Group" },
+              { key: "fabricType", label: "Fabric Type", default: "Weft Knit" },
+              { key: "shades", label: "Shade Groups (comma-separated)", type: "list", placeholder: "A40, B40", required: true, wide: true },
             ]}
           />
         )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["PO Number", "Style", "Batch", "Invoice", "GRN Qty", "GRN Date", "Shades"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{cols.map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
             <tbody>
               {filtered.map((r) => (
                 <tr key={r.id || r.batch} style={{ borderBottom: `1px solid ${tokens.line}` }}>
-                  <td className="py-2.5 pr-4 text-xs font-mono">{r.po}</td>
-                  <td className="py-2.5 pr-4 text-xs">{r.style}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono">{r.batch}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono" style={{ color: tokens.textMuted }}>{r.invoice}</td>
-                  <td className="py-2.5 pr-4 text-xs">{Number(r.qty).toFixed(2)}</td>
-                  <td className="py-2.5 pr-4 text-xs" style={{ color: tokens.textMuted }}>{r.date}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.po)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.buyer)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.style)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.schedule)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.category)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.colourCode)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.supplier)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.batch)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.invoice)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.layJob)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.date)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.rollNo)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.rolls)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{num(r.qty)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.composition)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.procurementGroup)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.fabricType)}</td>
                   <td className="py-2.5 pr-4 text-xs">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(r.shades || []).map((s) => (
@@ -157,6 +187,7 @@ export function RMWHView({ grnRecords, onAdd, canWrite }) {
 
 // ---------------- Cutting ----------------
 export function CuttingView({ dockets, onAdd, canWrite }) {
+  const tokens = useTokens();
   const [activeShade, setActiveShade] = useState(null);
   const [componentFilter, setComponentFilter] = useState("All");
   const [showAdd, setShowAdd] = useState(false);
@@ -178,11 +209,13 @@ export function CuttingView({ dockets, onAdd, canWrite }) {
     return compOk && shadeOk;
   }), [dockets, componentFilter, activeShade]);
 
-  const chartData = dockets.map((d) => ({ docket: d.docketId, consumption: d.consumption, component: d.component }));
+  const chartData = dockets.map((d) => ({ docket: d.docketId, consumption: Number(d.consumption || 0), component: d.component }));
   const topShades = shadeList.slice(0, 12);
-  const components = Array.from(new Set(dockets.map((d) => d.component)));
+  const components = Array.from(new Set(dockets.map((d) => d.component).filter(Boolean)));
 
   if (dockets.length === 0 && !canWrite) return <EmptyState label="Cutting" path="depts/CUTTING/dockets" />;
+
+  const cols = ["Docket ID", "CO", "Component", "Comp Group", "Style", "Category", "Schedule", "Shade Codes", "Fabric Code", "Fabric Color", "Lot No", "Lay Job", "Created", "Consumption", "Binding Cons", "Total Req", "Allocated Qty"];
 
   return (
     <>
@@ -199,7 +232,7 @@ export function CuttingView({ dockets, onAdd, canWrite }) {
             <h2 className="text-sm font-semibold">Shade Fragmentation — {shadeList.length} codes</h2>
             <p className="text-xs mt-0.5" style={{ color: tokens.textMuted }}>Click a swatch to filter dockets</p>
           </div>
-          {activeShade && <button onClick={() => setActiveShade(null)} className="text-xs px-2.5 py-1 rounded-md" style={{ color: tokens.amber, backgroundColor: "#E8A33D18" }}>Clear filter</button>}
+          {activeShade && <button onClick={() => setActiveShade(null)} className="text-xs px-2.5 py-1 rounded-md" style={{ color: tokens.amber, backgroundColor: `${tokens.amber}18` }}>Clear filter</button>}
         </div>
         <div className="flex gap-3 flex-wrap mt-4">
           {shadeList.map((s) => {
@@ -223,7 +256,7 @@ export function CuttingView({ dockets, onAdd, canWrite }) {
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="code" tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={{ stroke: tokens.line }} tickLine={false} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: tokens.text }} />
+            <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
             <Bar dataKey="count" radius={[4, 4, 0, 0]}>{topShades.map((s, i) => <Cell key={i} fill={s.component === "Body" ? tokens.indigo : tokens.teal} />)}</Bar>
           </BarChart>
         </ChartCard>
@@ -232,7 +265,7 @@ export function CuttingView({ dockets, onAdd, canWrite }) {
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="docket" tick={{ fill: tokens.textMuted, fontSize: 10 }} axisLine={{ stroke: tokens.line }} tickLine={false} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: tokens.text }} />
+            <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
             <Bar dataKey="consumption" radius={[4, 4, 0, 0]}>{chartData.map((d, i) => <Cell key={i} fill={d.component === "Body" ? tokens.indigo : tokens.amber} />)}</Bar>
           </BarChart>
         </ChartCard>
@@ -257,27 +290,64 @@ export function CuttingView({ dockets, onAdd, canWrite }) {
             onCancel={() => setShowAdd(false)}
             onSubmit={(data) => onAdd(data)}
             fields={[
-              { key: "docketId", label: "Docket ID" },
-              { key: "layJob", label: "Lay Job No" },
-              { key: "component", label: "Component", placeholder: "Body / CFL+Binding" },
-              { key: "schedule", label: "Schedule" },
-              { key: "shades", label: "Shade Codes (comma-separated)", type: "list", placeholder: "A17, B5" },
-              { key: "fabCode", label: "Fab Code" },
-              { key: "created", label: "Created", type: "date" },
-              { key: "consumption", label: "Consumption", type: "number" },
+              { type: "heading", label: "Docket" },
+              { key: "docketId", label: "Docket ID", required: true },
+              { key: "co", label: "CO" },
+              { key: "barcode", label: "Barcode" },
+              { type: "heading", label: "Style & marker" },
+              { key: "styleNo", label: "Style No." },
+              { key: "category", label: "Category" },
+              { key: "component", label: "Component", placeholder: "Body / CFL+Binding", required: true },
+              { key: "componentGroup", label: "Component Group", placeholder: "CG1 / CG2" },
+              { key: "mkType", label: "MK Type" },
+              { key: "mkName", label: "MK Name" },
+              { key: "ratioId", label: "Ratio ID" },
+              { key: "ratioDescription", label: "Ratio Description" },
+              { key: "fabWay", label: "Fab Way" },
+              { key: "pattern", label: "Pattern" },
+              { type: "heading", label: "Fabric" },
+              { key: "fabCode", label: "Fabric Code" },
+              { key: "fabricDescription", label: "Fabric Description" },
+              { key: "fabricColor", label: "Fabric Color", default: "BLACK 093 5A2" },
+              { key: "fabricName", label: "Fabric Name" },
+              { key: "color", label: "Color" },
+              { key: "lotNo", label: "Lot No." },
+              { key: "shades", label: "Shade Codes (comma-separated)", type: "list", placeholder: "A17, B5", required: true, wide: true },
+              { type: "heading", label: "Schedule & production" },
+              { key: "schedule", label: "Schedule", required: true },
+              { key: "layJob", label: "Lay Job No." },
+              { key: "created", label: "Created Date", type: "date" },
+              { key: "printDate", label: "Print Date", type: "date" },
+              { key: "location", label: "Location" },
+              { key: "rollNo", label: "Roll No." },
+              { type: "heading", label: "Consumption & requirement" },
+              { key: "consumption", label: "Actual Consumption", type: "number", required: true },
+              { key: "bindingConsumption", label: "Binding Consumption", type: "number" },
+              { key: "requirementWO", label: "Requirement (WO)", type: "number" },
+              { key: "requirementWastage", label: "Requirement (With Wastage)", type: "number" },
+              { key: "totalRequirement", label: "Total Requirement", type: "number" },
+              { key: "allocatedQty", label: "Allocated Qty", type: "number" },
+              { type: "heading", label: "Widths & cut" },
+              { key: "purchaseWidth", label: "Purchase Width", type: "number" },
+              { key: "actualWidth", label: "Actual Width", type: "number" },
+              { key: "cutLength", label: "Cut Length", type: "number" },
+              { key: "cutWidth", label: "Cut Width", type: "number" },
             ]}
           />
         )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["Docket ID", "Lay Job No", "Component", "Schedule", "Shade Codes", "Fab Code", "Created", "Consumption"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{cols.map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
             <tbody>
               {filteredDockets.map((d) => (
                 <tr key={d.id || d.docketId} style={{ borderBottom: `1px solid ${tokens.line}` }}>
-                  <td className="py-2.5 pr-4 text-xs font-mono">{d.docketId}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono">{d.layJob}</td>
-                  <td className="py-2.5 pr-4 text-xs">{d.component}</td>
-                  <td className="py-2.5 pr-4 text-xs">{d.schedule}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.docketId)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(d.co)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(d.component)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(d.componentGroup || d.category)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(d.styleNo)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(d.category)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(d.schedule)}</td>
                   <td className="py-2.5 pr-4 text-xs">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(d.shades || []).map((s) => (
@@ -288,9 +358,15 @@ export function CuttingView({ dockets, onAdd, canWrite }) {
                       ))}
                     </div>
                   </td>
-                  <td className="py-2.5 pr-4 text-xs font-mono" style={{ color: tokens.textMuted }}>{d.fabCode}</td>
-                  <td className="py-2.5 pr-4 text-xs" style={{ color: tokens.textMuted }}>{d.created}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono">{d.consumption}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(d.fabCode)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(d.fabricColor)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(d.lotNo)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.layJob)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(d.created)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.consumption)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.bindingConsumption)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.totalRequirement)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.allocatedQty)}</td>
                 </tr>
               ))}
             </tbody>
@@ -303,6 +379,7 @@ export function CuttingView({ dockets, onAdd, canWrite }) {
 
 // ---------------- MQA ----------------
 export function MQAView({ results, onAdd, canWrite }) {
+  const tokens = useTokens();
   const [resultFilter, setResultFilter] = useState("All");
   const [showAdd, setShowAdd] = useState(false);
   const filtered = useMemo(() => results.filter((r) => resultFilter === "All" || r.result === resultFilter), [results, resultFilter]);
@@ -311,8 +388,12 @@ export function MQAView({ results, onAdd, canWrite }) {
   const retestCount = results.filter((r) => r.result === "Retest").length;
   const failCount = results.filter((r) => r.result === "Fail").length;
   const avgDeltaE = results.length ? (results.reduce((a, r) => a + Number(r.deltaE || 0), 0) / results.length).toFixed(2) : "—";
+  const withMatch = results.filter((r) => r.matchPct !== undefined && r.matchPct !== null && r.matchPct !== "");
+  const avgMatch = withMatch.length ? (withMatch.reduce((a, r) => a + Number(r.matchPct || 0), 0) / withMatch.length).toFixed(1) : "—";
 
   if (results.length === 0 && !canWrite) return <EmptyState label="MQA" path="depts/MQA/results" />;
+
+  const cols = ["Shade Code", "GRN No", "Batch", "Roll", "DECMC", "DLCMC", "Da", "Db", "DCCMC", "DHCMC", "Delta E", "Match %", "Closest Std", "Result", "Recommendation", "Tested By", "Date"];
 
   return (
     <>
@@ -322,18 +403,19 @@ export function MQAView({ results, onAdd, canWrite }) {
         <KpiCard icon={RotateCcw} label="Retest" value={retestCount} sub="Delta E 0.8 – 1.2" accent={tokens.amber} />
         <KpiCard icon={XCircle} label="Fail" value={failCount} sub="Delta E > 1.2" accent={tokens.crimson} />
         <KpiCard icon={TrendingUp} label="Avg Delta E" value={avgDeltaE} sub="Across all samples" accent={tokens.indigo} />
+        <KpiCard icon={Percent} label="Avg Colour Match" value={avgMatch === "—" ? "—" : `${avgMatch}%`} sub="Datacolor 1000" accent={tokens.teal} />
       </div>
 
       <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
         <h2 className="text-sm font-semibold mb-1">Delta E by Shade Code</h2>
-        <p className="text-[11px] mb-4" style={{ color: tokens.textMuted }}>Lower is a closer match to the master standard</p>
+        <p className="text-[11px] mb-4" style={{ color: tokens.textMuted }}>Lower is a closer match to the master standard (Delta E CMC)</p>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={results} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="shade" tick={{ fill: tokens.textMuted, fontSize: 9 }} axisLine={{ stroke: tokens.line }} tickLine={false} interval={0} angle={-45} textAnchor="end" height={60} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: tokens.text }} />
-            <Bar dataKey="deltaE" radius={[3, 3, 0, 0]}>{results.map((r, i) => <Cell key={i} fill={mqaResultColor[r.result]} />)}</Bar>
+            <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
+            <Bar dataKey="deltaE" radius={[3, 3, 0, 0]}>{results.map((r, i) => <Cell key={i} fill={mqaResultColor[r.result] || tokens.indigo} />)}</Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -356,26 +438,50 @@ export function MQAView({ results, onAdd, canWrite }) {
           <AddRecordForm
             onCancel={() => setShowAdd(false)}
             onSubmit={(data) => onAdd(data)}
+            note="Delta E, Colour Match %, Result and Recommendation are generated automatically from the readings."
             fields={[
-              { key: "shade", label: "Shade Code" },
-              { key: "deltaE", label: "Delta E", type: "number" },
-              { key: "result", label: "Result", type: "select", options: ["Pass", "Retest", "Fail"], default: "Pass" },
-              { key: "tester", label: "Tested By" },
-              { key: "date", label: "Date", type: "date" },
+              { type: "heading", label: "Sample identification" },
+              { key: "shade", label: "Shade / Batch Shade Code", required: true },
+              { key: "grnNumber", label: "GRN Number" },
+              { key: "batchNumber", label: "Batch Number" },
+              { key: "rollNumber", label: "Roll Number" },
+              { key: "closestStandard", label: "Closest Matching Standard Shade" },
+              { type: "heading", label: "Spectrophotometer readings (Datacolor 1000)" },
+              { key: "deECMC", label: "DECMC (Delta E CMC)", type: "number", required: true },
+              { key: "dlCMC", label: "DLCMC", type: "number" },
+              { key: "da", label: "Da", type: "number" },
+              { key: "db", label: "Db", type: "number" },
+              { key: "dcCMC", label: "DCCMC", type: "number" },
+              { key: "dhCMC", label: "DHCMC", type: "number" },
+              { type: "heading", label: "Inspection" },
+              { key: "tester", label: "Tested By", required: true },
+              { key: "date", label: "Date", type: "date", required: true },
             ]}
           />
         )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["Shade Code", "Delta E", "Result", "Tested By", "Date"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{cols.map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
             <tbody>
               {filtered.map((r) => (
                 <tr key={r.id || r.shade} style={{ borderBottom: `1px solid ${tokens.line}` }}>
-                  <td className="py-2.5 pr-4 text-xs font-mono"><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: shadeHex(r.shade) }} />{r.shade}</div></td>
-                  <td className="py-2.5 pr-4 text-xs font-mono">{r.deltaE}</td>
-                  <td className="py-2.5 pr-4"><span className="text-xs font-medium px-2 py-1 rounded-full" style={{ color: mqaResultColor[r.result], backgroundColor: `${mqaResultColor[r.result]}22` }}>{r.result}</span></td>
-                  <td className="py-2.5 pr-4 text-xs" style={{ color: tokens.textMuted }}>{r.tester}</td>
-                  <td className="py-2.5 pr-4 text-xs" style={{ color: tokens.textMuted }}>{r.date}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap"><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: shadeHex(r.shade) }} />{dash(r.shade)}</div></td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.grnNumber)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.batchNumber)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.rollNumber)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.deECMC)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.dlCMC)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.da)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.db)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.dcCMC)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.dhCMC)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.deltaE)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{r.matchPct !== undefined && r.matchPct !== "" ? `${r.matchPct}%` : "—"}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.closestStandard)}</td>
+                  <td className="py-2.5 pr-4"><span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ color: mqaResultColor[r.result], backgroundColor: `${mqaResultColor[r.result] || tokens.line}22` }}>{dash(r.result)}</span></td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.recommendation)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.tester)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.date)}</td>
                 </tr>
               ))}
             </tbody>
@@ -388,13 +494,17 @@ export function MQAView({ results, onAdd, canWrite }) {
 
 // ---------------- Planning ----------------
 export function PlanningView({ rows, onAdd, canWrite }) {
+  const tokens = useTokens();
   const [showAdd, setShowAdd] = useState(false);
   const totalRequired = rows.reduce((a, r) => a + Number(r.required || 0), 0);
   const totalAllocated = rows.reduce((a, r) => a + Number(r.allocated || 0), 0);
+  const totalCutDockets = rows.reduce((a, r) => a + Number(r.cutDockets || 0), 0);
   const fullyAllocated = rows.filter((r) => r.status === "Fully Allocated").length;
   const planningStatusColor = { "Fully Allocated": tokens.teal, "Partial": tokens.amber, "Pending": tokens.crimson };
 
   if (rows.length === 0 && !canWrite) return <EmptyState label="Planning" path="depts/PLANNING/rows" />;
+
+  const cols = ["Schedule", "Style", "Colour", "Components", "Marker", "Required", "Allocated", "Approx (m)", "Cut Dockets", "Body Dockets", "Plies", "Lay Length", "Marker Ratio", "Status", "Remarks"];
 
   return (
     <>
@@ -403,6 +513,7 @@ export function PlanningView({ rows, onAdd, canWrite }) {
         <KpiCard icon={ClipboardList} label="Fabric Required" value={totalRequired.toLocaleString()} sub="Across all schedules" accent={tokens.teal} />
         <KpiCard icon={PackageCheck} label="Fabric Allocated" value={totalAllocated.toLocaleString()} sub={totalRequired ? `${((totalAllocated / totalRequired) * 100).toFixed(0)}% of required` : ""} accent={tokens.indigo} />
         <KpiCard icon={CheckCircle2} label="Fully Allocated" value={fullyAllocated} sub={`Of ${rows.length} schedules`} accent={tokens.teal} />
+        <KpiCard icon={Scissors} label="Cut Dockets" value={totalCutDockets || "—"} sub="Total released" accent={tokens.amber} />
       </div>
 
       <div className="rounded-xl p-5" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
@@ -412,7 +523,7 @@ export function PlanningView({ rows, onAdd, canWrite }) {
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="schedule" tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={{ stroke: tokens.line }} tickLine={false} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: tokens.text }} />
+            <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
             <Bar dataKey="required" fill={tokens.line} radius={[3, 3, 0, 0]} />
             <Bar dataKey="allocated" fill={tokens.indigo} radius={[3, 3, 0, 0]} />
           </BarChart>
@@ -429,27 +540,45 @@ export function PlanningView({ rows, onAdd, canWrite }) {
             onCancel={() => setShowAdd(false)}
             onSubmit={(data) => onAdd(data)}
             fields={[
-              { key: "schedule", label: "Schedule" },
-              { key: "style", label: "Style" },
+              { key: "schedule", label: "Schedule No.", required: true },
+              { key: "style", label: "Style", required: true },
+              { key: "colour", label: "Colour", default: "SD BLACK 093 54A2" },
               { key: "components", label: "Components" },
-              { key: "required", label: "Required", type: "number" },
-              { key: "allocated", label: "Allocated", type: "number" },
-              { key: "status", label: "Status", type: "select", options: ["Fully Allocated", "Partial", "Pending"], default: "Pending" },
+              { key: "marker", label: "Marker" },
+              { key: "required", label: "Required (yd)", type: "number", required: true },
+              { key: "allocated", label: "Allocated (yd)", type: "number", required: true },
+              { key: "approxM", label: "Approx Qty (m)", type: "number" },
+              { key: "cutDockets", label: "Cut Dockets", type: "number" },
+              { key: "bodyDockets", label: "Body Dockets", type: "number" },
+              { key: "plies", label: "Number of Plies", type: "number" },
+              { key: "layLength", label: "Lay Length", type: "number" },
+              { key: "markerRatio", label: "Marker Ratio", type: "number" },
+              { key: "status", label: "Status", type: "select", options: ["Fully Allocated", "Partial", "Pending"], default: "Pending", required: true },
+              { key: "remarks", label: "Remarks", wide: true },
             ]}
           />
         )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["Schedule", "Style", "Components", "Required", "Allocated", "Status"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{cols.map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id || r.schedule} style={{ borderBottom: `1px solid ${tokens.line}` }}>
-                  <td className="py-2.5 pr-4 text-xs font-mono">{r.schedule}</td>
-                  <td className="py-2.5 pr-4 text-xs">{r.style}</td>
-                  <td className="py-2.5 pr-4 text-xs">{r.components}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono">{Number(r.required).toLocaleString()}</td>
-                  <td className="py-2.5 pr-4 text-xs font-mono">{Number(r.allocated).toLocaleString()}</td>
-                  <td className="py-2.5 pr-4"><span className="text-xs font-medium px-2 py-1 rounded-full" style={{ color: planningStatusColor[r.status], backgroundColor: `${planningStatusColor[r.status]}22` }}>{r.status}</span></td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.schedule)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.style)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.colour)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.components)}</td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap">{dash(r.marker)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{r.required !== undefined ? Number(r.required).toLocaleString() : "—"}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{r.allocated !== undefined ? Number(r.allocated).toLocaleString() : "—"}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.approxM)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.cutDockets)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.bodyDockets)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.plies)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.layLength)}</td>
+                  <td className="py-2.5 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.markerRatio)}</td>
+                  <td className="py-2.5 pr-4"><span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ color: planningStatusColor[r.status], backgroundColor: `${planningStatusColor[r.status] || tokens.line}22` }}>{dash(r.status)}</span></td>
+                  <td className="py-2.5 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.remarks)}</td>
                 </tr>
               ))}
             </tbody>
@@ -462,6 +591,7 @@ export function PlanningView({ rows, onAdd, canWrite }) {
 
 // ---------------- Executive ----------------
 export function ExecutiveView({ grnRecords, dockets, results }) {
+  const tokens = useTokens();
   const totalGrnQty = grnRecords.reduce((a, r) => a + Number(r.qty || 0), 0);
   const gradeCounts = { A: 0, B: 0, C: 0, D: 0 };
   let totalGraded = 0;
@@ -508,7 +638,7 @@ export function ExecutiveView({ grnRecords, dockets, results }) {
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="grade" tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={{ stroke: tokens.line }} tickLine={false} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: tokens.text }} />
+            <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
             <Bar dataKey="count" radius={[4, 4, 0, 0]}>{gradeChartData.map((g, i) => <Cell key={i} fill={gradeColor[g.grade]} />)}</Bar>
           </BarChart>
         </ChartCard>
@@ -517,7 +647,7 @@ export function ExecutiveView({ grnRecords, dockets, results }) {
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.line} vertical={false} />
             <XAxis dataKey="code" tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={{ stroke: tokens.line }} tickLine={false} />
             <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: tokens.text }} />
+            <Tooltip contentStyle={tt(tokens)} labelStyle={{ color: tokens.text }} />
             <Bar dataKey="count" radius={[4, 4, 0, 0]}>{topShades.map((s, i) => <Cell key={i} fill={s.component === "Body" ? tokens.indigo : tokens.teal} />)}</Bar>
           </BarChart>
         </ChartCard>
@@ -528,6 +658,7 @@ export function ExecutiveView({ grnRecords, dockets, results }) {
 
 // ---------------- Reports ----------------
 export function ReportsView({ grnRecords, dockets }) {
+  const tokens = useTokens();
   const [activeReport, setActiveReport] = useState("grn");
   const shadeOccurrence = {};
   dockets.forEach((d) => (d.shades || []).forEach((s) => {
@@ -564,15 +695,17 @@ export function ReportsView({ grnRecords, dockets }) {
           <h2 className="text-sm font-semibold mb-4">GRN Report</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["PO Number", "Style", "Batch", "GRN Qty", "GRN Date", "Shades"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["PO Number", "Style", "Colour Code", "Supplier", "Batch", "GRN Qty", "GRN Date", "Shades"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
               <tbody>{grnRecords.map((r) => (
                 <tr key={r.id || r.batch} style={{ borderBottom: `1px solid ${tokens.line}` }}>
-                  <td className="py-2 pr-4 text-xs font-mono">{r.po}</td>
-                  <td className="py-2 pr-4 text-xs">{r.style}</td>
-                  <td className="py-2 pr-4 text-xs font-mono">{r.batch}</td>
-                  <td className="py-2 pr-4 text-xs">{Number(r.qty).toFixed(2)}</td>
-                  <td className="py-2 pr-4 text-xs" style={{ color: tokens.textMuted }}>{r.date}</td>
-                  <td className="py-2 pr-4 text-xs font-mono">{(r.shades || []).join(", ")}</td>
+                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.po)}</td>
+                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(r.style)}</td>
+                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(r.colourCode)}</td>
+                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(r.supplier)}</td>
+                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(r.batch)}</td>
+                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{num(r.qty)}</td>
+                  <td className="py-2 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(r.date)}</td>
+                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{(r.shades || []).join(", ") || "—"}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -600,15 +733,17 @@ export function ReportsView({ grnRecords, dockets }) {
           <h2 className="text-sm font-semibold mb-4">Cutting Report</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["Docket ID", "Component", "Schedule", "Fab Code", "Created", "Consumption"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ borderBottom: `1px solid ${tokens.line}` }}>{["Docket ID", "Component", "Schedule", "Fab Code", "Lot No", "Created", "Consumption", "Total Req"].map((h) => <th key={h} className="text-[11px] uppercase tracking-wide font-medium pb-2 pr-4 whitespace-nowrap" style={{ color: tokens.textMuted }}>{h}</th>)}</tr></thead>
               <tbody>{dockets.map((d) => (
                 <tr key={d.id || d.docketId} style={{ borderBottom: `1px solid ${tokens.line}` }}>
-                  <td className="py-2 pr-4 text-xs font-mono">{d.docketId}</td>
-                  <td className="py-2 pr-4 text-xs">{d.component}</td>
-                  <td className="py-2 pr-4 text-xs">{d.schedule}</td>
-                  <td className="py-2 pr-4 text-xs font-mono" style={{ color: tokens.textMuted }}>{d.fabCode}</td>
-                  <td className="py-2 pr-4 text-xs" style={{ color: tokens.textMuted }}>{d.created}</td>
-                  <td className="py-2 pr-4 text-xs font-mono">{d.consumption}</td>
+                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.docketId)}</td>
+                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(d.component)}</td>
+                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(d.schedule)}</td>
+                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(d.fabCode)}</td>
+                  <td className="py-2 pr-4 text-xs whitespace-nowrap">{dash(d.lotNo)}</td>
+                  <td className="py-2 pr-4 text-xs whitespace-nowrap" style={{ color: tokens.textMuted }}>{dash(d.created)}</td>
+                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.consumption)}</td>
+                  <td className="py-2 pr-4 text-xs font-mono whitespace-nowrap">{dash(d.totalRequirement)}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -620,9 +755,10 @@ export function ReportsView({ grnRecords, dockets }) {
 }
 
 // ---------------- shared bits ----------------
-const tooltipStyle = { backgroundColor: tokens.panelAlt, border: `1px solid ${tokens.line}`, borderRadius: 8, fontSize: 12 };
+const tt = (tokens) => ({ backgroundColor: tokens.panelAlt, border: `1px solid ${tokens.line}`, borderRadius: 8, fontSize: 12 });
 
 function ChartCard({ title, sub, children }) {
+  const tokens = useTokens();
   return (
     <div className="rounded-xl p-5 flex-1 min-w-[320px]" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
       <h2 className="text-sm font-semibold mb-1">{title}</h2>
@@ -632,30 +768,24 @@ function ChartCard({ title, sub, children }) {
   );
 }
 
-function EmptyState({ label, path }) {
-  return (
-    <div className="rounded-xl p-10 flex flex-col items-center justify-center text-center gap-2" style={{ backgroundColor: tokens.panel, border: `1px dashed ${tokens.line}`, minHeight: 240 }}>
-      <h2 className="text-sm font-semibold">No {label} data yet</h2>
-      <p className="text-xs max-w-sm" style={{ color: tokens.textMuted }}>
-        Nothing found at <span className="font-mono">{path}</span> in Firebase. Run <span className="font-mono">npm run seed</span> once to load the starting dataset.
-      </p>
-    </div>
-  );
-}
-
 function AddButton({ label, onClick }) {
+  const tokens = useTokens();
   return (
     <button onClick={onClick} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md font-medium"
-      style={{ backgroundColor: tokens.indigo, color: tokens.text }}>
+      style={{ backgroundColor: tokens.indigo, color: "#fff" }}>
       <Plus size={13} /> {label}
     </button>
   );
 }
 
-// Generic add-record form. `fields` describes each input; onSubmit receives
-// the built record object (numbers/lists coerced) and should write it to Firebase.
-function AddRecordForm({ fields, onSubmit, onCancel }) {
-  const [values, setValues] = useState(() => Object.fromEntries(fields.map((f) => [f.key, f.default ?? ""])));
+// Generic add-record form. `fields` describes each input; a field with
+// type "heading" renders a full-width section label. onSubmit receives the
+// built record object (numbers/lists coerced, empty values omitted).
+function AddRecordForm({ fields, onSubmit, onCancel, note }) {
+  const tokens = useTokens();
+  const [values, setValues] = useState(() =>
+    Object.fromEntries(fields.filter((f) => f.type !== "heading").map((f) => [f.key, f.default ?? ""]))
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -666,9 +796,11 @@ function AddRecordForm({ fields, onSubmit, onCancel }) {
     try {
       const data = {};
       for (const f of fields) {
+        if (f.type === "heading") continue;
         let v = values[f.key];
+        if (v === "" || v === undefined || v === null) continue;
         if (f.type === "number") v = Number(v);
-        else if (f.type === "list") v = v.split(",").map((s) => s.trim()).filter(Boolean);
+        else if (f.type === "list") { v = v.split(",").map((s) => s.trim()).filter(Boolean); if (v.length === 0) continue; }
         data[f.key] = v;
       }
       await onSubmit(data);
@@ -681,40 +813,58 @@ function AddRecordForm({ fields, onSubmit, onCancel }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 mb-5 p-4 rounded-lg" style={{ backgroundColor: tokens.panelAlt, border: `1px solid ${tokens.line}` }}>
+    <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 mb-5 p-4 rounded-lg max-h-[70vh] overflow-y-auto" style={{ backgroundColor: tokens.panelAlt, border: `1px solid ${tokens.line}` }}>
       <div className="col-span-2 flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: tokens.textMuted }}>New record</h3>
         <button type="button" onClick={onCancel} aria-label="Cancel"><X size={14} color={tokens.textMuted} /></button>
       </div>
-      {fields.map((f) => (
-        <div key={f.key} className={f.wide ? "col-span-2" : ""}>
-          <label className="text-[11px]" style={{ color: tokens.textMuted }}>{f.label}</label>
-          {f.type === "select" ? (
-            <select value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
-              className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.text }}>
-              {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          ) : (
-            <input
-              required={f.required !== false}
-              type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
-              step={f.type === "number" ? "any" : undefined}
-              value={values[f.key]}
-              onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
-              placeholder={f.placeholder}
-              className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
-              style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.text }}
-            />
-          )}
-        </div>
-      ))}
+      {note && <p className="col-span-2 text-[11px]" style={{ color: tokens.textMuted }}>{note}</p>}
+      {fields.map((f, i) => {
+        if (f.type === "heading") {
+          return <div key={`h-${i}`} className="col-span-2 text-[11px] uppercase tracking-wide font-semibold mt-1" style={{ color: tokens.indigo }}>{f.label}</div>;
+        }
+        return (
+          <div key={f.key} className={f.wide ? "col-span-2" : ""}>
+            <label className="text-[11px]" style={{ color: tokens.textMuted }}>{f.label}</label>
+            {f.type === "select" ? (
+              <select value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.text }}>
+                {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            ) : (
+              <input
+                required={f.required === true}
+                type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                step={f.type === "number" ? "any" : undefined}
+                value={values[f.key]}
+                onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                placeholder={f.placeholder}
+                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
+                style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.text }}
+              />
+            )}
+          </div>
+        );
+      })}
       {error && <div className="col-span-2 text-xs" style={{ color: tokens.crimson }}>{error}</div>}
       <div className="col-span-2 flex gap-2">
-        <button type="submit" disabled={busy} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: tokens.indigo, color: tokens.text, opacity: busy ? 0.6 : 1 }}>
+        <button type="submit" disabled={busy} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: tokens.indigo, color: "#fff", opacity: busy ? 0.6 : 1 }}>
           {busy ? "Saving..." : "Save record"}
         </button>
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg text-sm" style={{ color: tokens.textMuted, border: `1px solid ${tokens.line}` }}>Cancel</button>
       </div>
     </form>
+  );
+}
+
+function EmptyState({ label, path }) {
+  const tokens = useTokens();
+  return (
+    <div className="rounded-xl p-10 flex flex-col items-center justify-center text-center gap-2" style={{ backgroundColor: tokens.panel, border: `1px dashed ${tokens.line}`, minHeight: 240 }}>
+      <h2 className="text-sm font-semibold">No {label} data yet</h2>
+      <p className="text-xs max-w-sm" style={{ color: tokens.textMuted }}>
+        Nothing found at <span className="font-mono">{path}</span> in Firebase. Run <span className="font-mono">npm run seed</span> once to load the starting dataset.
+      </p>
+    </div>
   );
 }

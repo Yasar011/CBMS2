@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
-import { tokens } from "../tokens";
-import { Lock } from "lucide-react";
+import { useTokens, useTheme } from "../tokens";
+import { Lock, Sun, Moon } from "lucide-react";
 
 export default function Login() {
+  const tokens = useTokens();
+  const { theme, toggle } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -28,7 +30,11 @@ export default function Login() {
   }
 
   return (
-    <div className="w-full min-h-[900px] flex items-center justify-center" style={{ backgroundColor: tokens.bg, fontFamily: "'Inter', sans-serif" }}>
+    <div className="w-full min-h-[900px] flex items-center justify-center relative" style={{ backgroundColor: tokens.bg, fontFamily: "'Inter', sans-serif" }}>
+      <button type="button" onClick={toggle} aria-label="Toggle theme"
+        className="absolute top-5 right-5 rounded-lg p-2" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.textMuted }}>
+        {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+      </button>
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-xl p-8" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <div className="rounded-lg p-2" style={{ backgroundColor: tokens.indigoSoft }}>

@@ -2,10 +2,11 @@ import React from "react";
 import { AuthProvider, useAuth } from "./AuthContext";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
-import { tokens } from "./tokens";
+import { ThemeProvider, useTokens } from "./tokens";
 
 function Gate() {
   const { authUser, profile, loading } = useAuth();
+  const tokens = useTokens();
 
   if (loading) {
     return (
@@ -30,8 +31,10 @@ function Gate() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Gate />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

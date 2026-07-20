@@ -2,13 +2,14 @@ import React, { useEffect, useState } from "react";
 import { ref, onValue, set } from "firebase/database";
 import { db } from "../firebase";
 import { createUserAsAdmin } from "../firebaseSecondary";
-import { tokens } from "../tokens";
+import { useTokens } from "../tokens";
 import { objToArray } from "../lib";
 import { UserPlus, Users as UsersIcon } from "lucide-react";
 
 const DEPTS = ["RMWH", "MQA", "PLANNING", "CUTTING"];
 
 export default function UserManagement() {
+  const tokens = useTokens();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "user", dept: "RMWH" });
   const [status, setStatus] = useState("");

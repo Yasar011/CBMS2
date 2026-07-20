@@ -1,5 +1,5 @@
 import React from "react";
-import { tokens } from "./tokens";
+import { useTokens } from "./tokens";
 
 export function hashCode(str) {
   let h = 0;
@@ -38,7 +38,35 @@ export function objToArray(obj) {
   return Object.entries(obj).map(([id, v]) => ({ id, ...v }));
 }
 
+// Per the dashboard spec: from the Datacolor spectrophotometer readings the
+// dashboard derives Delta E, Colour Match %, compatibility Result and a
+// Recommendation. DECMC is the CMC total colour difference, so it is Delta E.
+export function mqaResultFor(deltaE) {
+  if (deltaE <= 0.8) return "Pass";
+  if (deltaE <= 1.2) return "Retest";
+  return "Fail";
+}
+
+export function mqaRecommendationFor(result) {
+  if (result === "Pass") return "Approve & standardize shade";
+  if (result === "Retest") return "Re-scan sample under QC light box";
+  return "Reject batch — re-dye required";
+}
+
+export function computeMqaDerived(data) {
+  const deltaE = Number(data.deECMC ?? data.deltaE ?? 0);
+  const result = mqaResultFor(deltaE);
+  return {
+    deltaE: +deltaE.toFixed(2),
+    matchPct: +Math.max(0, Math.min(100, 100 - deltaE * 5)).toFixed(1),
+    result,
+    recommendation: mqaRecommendationFor(result),
+    closestStandard: data.closestStandard || data.shade || "",
+  };
+}
+
 export function KpiCard({ icon: Icon, label, value, sub, accent }) {
+  const tokens = useTokens();
   return (
     <div className="rounded-xl p-4 flex-1 min-w-[160px]" style={{ backgroundColor: tokens.panel, border: `1px solid ${tokens.line}` }}>
       <div className="flex items-center justify-between mb-3">
