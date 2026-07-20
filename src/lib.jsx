@@ -95,6 +95,31 @@ export function deriveMasterLibrary(results) {
     .sort((a, b) => romanValue(a.group) - romanValue(b.group));
 }
 
+// Live Shade-Group assignment for the WHOLE result set, computed from ΔE alone.
+// Records are sorted by ΔE and walked in order: a record joins the current group
+// while its ΔE stays within SHADE_TOLERANCE (≤ 0.02) of that group's running
+// centroid ΔE; the first record that exceeds it opens the next Roman-numeral
+// group (I, II, III, …). Original shade names are always kept — only the group
+// label is (re)assigned. Returns the records in their original order with fresh
+// `shadeGroup` / `mappedStandard` fields, so the table and Master Shade Library
+// always reflect the rule regardless of what was stored at insert time.
+export function groupResultsByDeltaE(results) {
+  const rows = results.map((r) => ({ ...r, deltaE: +Number(r.deltaE ?? 0).toFixed(2) }));
+  const sorted = [...rows].sort((a, b) => a.deltaE - b.deltaE);
+  let sum = 0, count = 0, groupIndex = 0;
+  for (const r of sorted) {
+    if (count > 0 && Math.abs(r.deltaE - sum / count) <= SHADE_TOLERANCE) {
+      sum += r.deltaE; count += 1;
+    } else {
+      groupIndex += 1; sum = r.deltaE; count = 1;
+    }
+    const roman = toRoman(groupIndex);
+    r.shadeGroup = roman;
+    r.mappedStandard = `STD-${roman}`;
+  }
+  return rows;
+}
+
 function toRomanValue(roman) {
   if (!roman || typeof roman !== "string") return 0;
   const vals = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };

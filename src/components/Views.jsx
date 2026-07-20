@@ -9,7 +9,7 @@ import {
   Download, FileSpreadsheet, Library, Link2
 } from "lucide-react";
 import { useTokens, gradeColor } from "../tokens";
-import { KpiCard, shadeHex, deriveMasterLibrary, ILLUMINANTS } from "../lib";
+import { KpiCard, shadeHex, deriveMasterLibrary, groupResultsByDeltaE, ILLUMINANTS } from "../lib";
 import { exportExcel, exportPdf } from "../exporters";
 
 const dash = (v) => (v === undefined || v === null || v === "" ? "—" : v);
@@ -383,12 +383,16 @@ export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
   const tokens = useTokens();
   const [resultFilter, setResultFilter] = useState("All");
   const [showAdd, setShowAdd] = useState(false);
-  const filtered = useMemo(() => results.filter((r) => resultFilter === "All" || r.result === resultFilter), [results, resultFilter]);
+  // Shade Groups are (re)computed live from every record's ΔE (≤ 0.02 rule),
+  // so the table and Master Shade Library always reflect the current rule rather
+  // than whatever group was stored when each record was first saved.
+  const grouped = useMemo(() => groupResultsByDeltaE(results), [results]);
+  const filtered = useMemo(() => grouped.filter((r) => resultFilter === "All" || r.result === resultFilter), [grouped, resultFilter]);
   const mqaResultColor = { Pass: tokens.teal, Fail: tokens.crimson };
-  const passCount = results.filter((r) => r.result === "Pass").length;
-  const failCount = results.filter((r) => r.result === "Fail").length;
-  const avgDeltaE = results.length ? (results.reduce((a, r) => a + Number(r.deltaE || 0), 0) / results.length).toFixed(2) : "—";
-  const library = useMemo(() => deriveMasterLibrary(results), [results]);
+  const passCount = grouped.filter((r) => r.result === "Pass").length;
+  const failCount = grouped.filter((r) => r.result === "Fail").length;
+  const avgDeltaE = grouped.length ? (grouped.reduce((a, r) => a + Number(r.deltaE || 0), 0) / grouped.length).toFixed(2) : "—";
+  const library = useMemo(() => deriveMasterLibrary(grouped), [grouped]);
 
   // Chart data must contain ONLY the fields the chart reads. Passing raw MQA
   // records straight to Recharts leaks extra data fields (notably `style`, a
