@@ -12,30 +12,13 @@ export function hashCode(str) {
 // Uses medium lightness (45–65 %) so the swatch is never invisible against a
 // dark panel (#1B2027) or a light panel (#FFFFFF).
 export function shadeHex(code) {
-  // Guard: Firebase records can arrive with undefined/null shade fields;
-  // returning a neutral mid-grey prevents hashCode(undefined) from crashing.
+  // Guard: Firebase records can arrive with undefined/null shade fields; return a mid‑grey fallback.
   if (!code) return "#6B7280";
   const h = hashCode(code);
-  const warm = h % 2 === 0;
-  // Spread hues across warm (orange/red) and cool (blue/purple) spectrums
-  const hue = warm ? 15 + (h % 50) : 200 + (h % 60);
-  // Lightness: 45–65 % — always readable on both themes
-  const light = 45 + (h % 21);
-  // Saturation: 35–60 % — enough chroma to distinguish codes
-  const sat = 35 + (h % 26);
-  const s = sat / 100, l = light / 100;
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r, g, b;
-  if (hue < 60) [r, g, b] = [c, x, 0];
-  else if (hue < 120) [r, g, b] = [x, c, 0];
-  else if (hue < 180) [r, g, b] = [0, c, x];
-  else if (hue < 240) [r, g, b] = [0, x, c];
-  else if (hue < 300) [r, g, b] = [x, 0, c];
-  else [r, g, b] = [c, 0, x];
-  const toHex = (v) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  // Small set of grayscale shades of black.
+  const greys = ["#111111", "#333333", "#555555", "#777777", "#999999"];
+  const idx = Math.abs(h) % greys.length;
+  return greys[idx];
 }
 
 // Turns a Firebase RTDB snapshot object ({key: {...}}) into an array,
