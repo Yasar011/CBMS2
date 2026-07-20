@@ -34,10 +34,12 @@ export function objToArray(obj) {
 // produces a Da (red/green) and Db (yellow/blue) delta vs. the master standard.
 export const ILLUMINANTS = ["A", "F2", "D65"];
 
-// Master-Shade-Library matching tolerance, in Da/Db signature space.
-// A scan whose average (Da, Db) falls within this distance of an existing
-// standard is mapped to that standard instead of creating a new one.
-export const SHADE_TOLERANCE = 0.5;
+// Master-Shade-Library grouping tolerance, expressed as a Delta E (ΔE) difference.
+// Two shades whose ΔE differ by ≤ this value are treated as the same shade and
+// share one Roman-numeral Shade Group. A scan whose ΔE differs by more than this
+// from every known group gets a brand-new Shade Group (its original shade name
+// is always retained).
+export const SHADE_TOLERANCE = 0.02;
 
 // Pass rule (per Brandix QC): a shade passes only when every Da and Db reading
 // across all three illuminants is negative. Any non-negative reading fails.
@@ -80,15 +82,16 @@ export function deriveMasterLibrary(results) {
   for (const r of results) {
     const g = r.shadeGroup;
     if (!g) continue;
-    if (!groups[g]) groups[g] = { group: g, standard: r.mappedStandard || `STD-${g}`, das: [], dbs: [], shades: [], count: 0 };
+    if (!groups[g]) groups[g] = { group: g, standard: r.mappedStandard || `STD-${g}`, das: [], dbs: [], deltaEs: [], shades: [], count: 0 };
     groups[g].das.push(Number(r.avgDa ?? 0));
     groups[g].dbs.push(Number(r.avgDb ?? 0));
+    groups[g].deltaEs.push(Number(r.deltaE ?? 0));
     if (r.shade && !groups[g].shades.includes(r.shade)) groups[g].shades.push(r.shade);
     groups[g].count += 1;
   }
   const romanValue = (s) => toRomanValue(s);
   return Object.values(groups)
-    .map((g) => ({ group: g.group, standard: g.standard, count: g.count, shades: g.shades, centroidDa: +mean(g.das).toFixed(3), centroidDb: +mean(g.dbs).toFixed(3) }))
+    .map((g) => ({ group: g.group, standard: g.standard, count: g.count, shades: g.shades, centroidDa: +mean(g.das).toFixed(3), centroidDb: +mean(g.dbs).toFixed(3), centroidDeltaE: +mean(g.deltaEs).toFixed(3) }))
     .sort((a, b) => romanValue(a.group) - romanValue(b.group));
 }
 
@@ -104,17 +107,18 @@ function toRomanValue(roman) {
   return total;
 }
 
-// Map a scan against the existing library. If its signature is within
-// SHADE_TOLERANCE of a known standard, reuse that standard's Roman-numeral
-// Shade Group; otherwise mint the next Roman numeral as a new standard.
-// The original shade name is always retained for traceability.
-export function assignShadeGroup(sig, library) {
-  let best = null, bestDist = Infinity;
+// Map a scan against the existing library by Delta E. If the scan's ΔE is
+// within SHADE_TOLERANCE (≤ 0.02) of a known group's ΔE, reuse that group's
+// Roman-numeral Shade Group; otherwise mint the next Roman numeral as a new
+// group. The original shade name is always retained for traceability.
+export function assignShadeGroup(deltaE, library) {
+  const e = Number(deltaE);
+  let best = null, bestDiff = Infinity;
   for (const m of library) {
-    const d = Math.hypot(sig.avgDa - m.centroidDa, sig.avgDb - m.centroidDb);
-    if (d < bestDist) { bestDist = d; best = m; }
+    const d = Math.abs(e - m.centroidDeltaE);
+    if (d < bestDiff) { bestDiff = d; best = m; }
   }
-  if (best && bestDist <= SHADE_TOLERANCE) {
+  if (best && bestDiff <= SHADE_TOLERANCE) {
     return { shadeGroup: best.group, mappedStandard: best.standard, newStandard: false };
   }
   const nextNum = library.reduce((mx, m) => Math.max(mx, toRomanValue(m.group)), 0) + 1;
@@ -131,7 +135,7 @@ export function computeMqaDerived(data, existingResults = []) {
   const deltaE = +mean(perIllum).toFixed(2);
   const result = mqaResultFromDeltas(sig.da, sig.db);
   const library = deriveMasterLibrary(existingResults);
-  const mapping = assignShadeGroup(sig, library);
+  const mapping = assignShadeGroup(deltaE, library);
   return {
     avgDa: sig.avgDa,
     avgDb: sig.avgDb,

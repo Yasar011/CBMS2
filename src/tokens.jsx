@@ -33,16 +33,15 @@ export const PALETTES = {
   },
 };
 
-// Shade-tier swatches — distinct, visible colours for grades A–D.
-// Previous values were near-black (#17181A, #2B2C2E …) which were
-// invisible against the dark panel background (#1B2027).
-// New values use a teal→amber→crimson progression so each tier is
-// immediately readable on both the dark and light themes.
+// Shade-tier swatches — the fabric is black, so every grade is rendered as a
+// shade of black (grey). Grade A (best match, closest to standard) is the
+// darkest; grade D (most off-shade) is the lightest. The values stay light
+// enough to remain visible against both the dark and light panel backgrounds.
 export const gradeColor = {
-  A: "#4C8C86",  // teal  — best match (closest to standard)
-  B: "#3B5BA5",  // indigo
-  C: "#E8A33D",  // amber
-  D: "#B23A3A",  // crimson — worst match (most off-shade)
+  A: "#2A2A2A",  // near-black — best match (closest to standard)
+  B: "#555555",  // dark grey
+  C: "#808080",  // mid grey
+  D: "#AAAAAA",  // light grey — worst match (most off-shade)
 };
 
 // Default export kept as the dark palette for any non-component code that still

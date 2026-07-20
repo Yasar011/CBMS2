@@ -170,7 +170,7 @@ export function RMWHView({ grnRecords, onAdd, canWrite }) {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(r.shades || []).map((s) => (
                         <div key={s} className="flex items-center gap-1 rounded px-1.5 py-0.5" style={{ backgroundColor: tokens.panelAlt }}>
-                          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: gradeColor[s[0]] || tokens.line }} />
+                          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: shadeHex(s) }} />
                           <span className="font-mono text-[10px]">{s}</span>
                         </div>
                       ))}
