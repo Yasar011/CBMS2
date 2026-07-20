@@ -384,7 +384,7 @@ export function MQAView({ results, grnRecords = [], onAdd, canWrite }) {
   const [resultFilter, setResultFilter] = useState("All");
   const [showAdd, setShowAdd] = useState(false);
   const filtered = useMemo(() => results.filter((r) => resultFilter === "All" || r.result === resultFilter), [results, resultFilter]);
-  const mqaResultColor = { Pass: tokens.teal, Retest: tokens.amber, Fail: tokens.crimson };
+  const mqaResultColor = { Pass: tokens.teal, Fail: tokens.crimson };
   const passCount = results.filter((r) => r.result === "Pass").length;
   const failCount = results.filter((r) => r.result === "Fail").length;
   const avgDeltaE = results.length ? (results.reduce((a, r) => a + Number(r.deltaE || 0), 0) / results.length).toFixed(2) : "—";
@@ -554,7 +554,6 @@ export function ExecutiveView({ grnRecords, dockets, results }) {
   const topShades = shadeList.slice(0, 8);
   const mqaPassCount = results.filter((r) => r.result === "Pass").length;
   const mqaFailCount = results.filter((r) => r.result === "Fail").length;
-  const mqaRetestCount = results.filter((r) => r.result === "Retest").length;
 
   return (
     <>
@@ -563,7 +562,7 @@ export function ExecutiveView({ grnRecords, dockets, results }) {
         <KpiCard icon={Scissors} label="Cutting Dockets" value={dockets.length} sub="Body + CFL+Binding" accent={tokens.teal} />
         <KpiCard icon={Palette} label="Shade Codes in Use" value={shadeList.length} sub="1 nominal color" accent={tokens.crimson} />
         <KpiCard icon={Target} label="Grade A/B Match Rate" value={`${goodGradePct}%`} sub="Of incoming rolls" accent={tokens.teal} />
-        <KpiCard icon={FlaskConical} label="MQA Pass Rate" value={results.length ? `${((mqaPassCount / results.length) * 100).toFixed(0)}%` : "—"} sub={`${mqaFailCount} fails, ${mqaRetestCount} retests`} accent={tokens.amber} />
+        <KpiCard icon={FlaskConical} label="MQA Pass Rate" value={results.length ? `${((mqaPassCount / results.length) * 100).toFixed(0)}%` : "—"} sub={`${mqaFailCount} fails of ${results.length}`} accent={tokens.amber} />
       </div>
 
       <div className="rounded-xl px-4 py-4 flex items-start gap-3" style={{ backgroundColor: tokens.indigoSoft, border: `1px solid ${tokens.indigo}44` }}>

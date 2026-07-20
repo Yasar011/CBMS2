@@ -38,7 +38,8 @@ export default function Dashboard() {
   const dept = profile?.dept;
 
   // Only fetch the paths this user is allowed to read, per database.rules.json
-  const grnRecords = useDbList("depts/RMWH/grn", isAdmin || dept === "RMWH");
+  // MQA also needs read access to RMWH records to link a scan to its GRN batch.
+  const grnRecords = useDbList("depts/RMWH/grn", isAdmin || dept === "RMWH" || dept === "MQA");
   const dockets = useDbList("depts/CUTTING/dockets", isAdmin || dept === "CUTTING");
   const mqaResults = useDbList("depts/MQA/results", isAdmin || dept === "MQA");
 
