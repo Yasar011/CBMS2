@@ -38,7 +38,7 @@ const db = admin.database();
 const auth = admin.auth();
 
 const ADMIN_EMAIL = "admin@brandix.local";
-const ADMIN_PASSWORD = "123";
+const ADMIN_PASSWORD = "Brandix123"; // Firebase Auth requires 6+ characters
 
 // ---- Real GRN data, from the uploaded "Black Colour Batch Details" sheet ----
 const grnRecords = [
@@ -114,7 +114,7 @@ async function seed() {
   await db.ref("depts/MQA/results").set(mqaResults);
   await db.ref("depts/PLANNING/rows").set(planningRows);
 
-  console.log("Seed complete. Sign in with admin@brandix.local / 123");
+  console.log(`Seed complete. Sign in with ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   process.exit(0);
 }
 

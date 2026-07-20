@@ -32,11 +32,12 @@ real Cutting docket data, and illustrative MQA/Planning data).
 npm run seed
 ```
 
-This creates the super admin account **admin@brandix.local / 123** and writes it to
+This creates the super admin account **admin@brandix.local / Brandix123** and writes it to
 `/users/{uid}` with `role: "admin"`. Firebase Auth requires an email format, so "admin" became
 `admin@brandix.local` — sign in with that.
 
-> `123` is a placeholder password for getting started. Change it in Firebase Console →
+> `Brandix123` is a placeholder password for getting started (Firebase requires 6+ characters,
+> so the originally documented `123` never actually worked). Change it in Firebase Console →
 > Authentication → Users once you're set up, since anyone with it has full admin access.
 
 ## 4. Run it
