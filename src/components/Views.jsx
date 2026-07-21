@@ -737,7 +737,10 @@ export function ReportsView({ grnRecords, dockets, results = [] }) {
 // live datasets so the same shape can be rendered and exported to Excel/PDF.
 function buildReports(grnRecords, dockets, results) {
   const shadesJoin = (r) => (r.shades || []).join(", ");
-  const library = deriveMasterLibrary(results);
+  // Regroup MQA records live by ΔE (≤ 0.02) so the report's Shade Groups match
+  // what the MQA screen shows, instead of the stale group stored at insert time.
+  const grouped = groupResultsByDeltaE(results);
+  const library = deriveMasterLibrary(grouped);
 
   // GRN
   const grnQty = grnRecords.reduce((a, r) => a + Number(r.qty || 0), 0);
@@ -790,7 +793,7 @@ function buildReports(grnRecords, dockets, results) {
       { header: "Match %", key: "matchPct" }, { header: "Shade Group", key: "shadeGroup" }, { header: "Mapped Std", key: "mappedStandard" },
       { header: "Result", key: "result" }, { header: "Recommendation", key: "recommendation" }, { header: "Tested By", key: "tester" }, { header: "Date", key: "date" },
     ],
-    rows: results,
+    rows: grouped,
   };
 
   // Cutting
